@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#6366f1" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <!-- iOS "Add to Home Screen" support -->
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Time Tracker" />
+  <link rel="apple-touch-icon" href="icon-180.png" />
+  <title>Abhishek's Time Tracker</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <!-- ===================== AUTH ===================== -->
+  <div id="auth" class="auth hidden">
+    <div class="auth-card">
+      <div class="brand"><span class="logo">◴</span> Abhishek's Time Tracker</div>
+      <p class="muted">Track where your time really goes.</p>
+      <input id="auth-email" type="email" placeholder="Email" autocomplete="username" />
+      <input id="auth-pass" type="password" placeholder="Password" autocomplete="current-password" />
+      <button id="auth-signin" class="btn primary">Sign in</button>
+      <button id="auth-signup" class="btn ghost">Create account</button>
+      <p id="auth-msg" class="auth-msg"></p>
+    </div>
+  </div>
+
+  <!-- ===================== APP ===================== -->
+  <div id="app" class="app hidden">
+    <header class="topbar">
+      <div class="brand sm"><span class="logo">◴</span> Abhishek's Time Tracker</div>
+      <button id="signout" class="icon-btn" title="Sign out">⎋</button>
+    </header>
+
+    <main id="main">
+      <!-- ---------- TODAY ---------- -->
+      <section id="view-today" class="view">
+        <!-- Plan your day -->
+        <div class="card">
+          <div class="section-row"><h3>Plan your day</h3><span class="muted small" id="plan-total"></span></div>
+          <p class="muted small">List the tasks you intend to do and how long you want to spend on each.</p>
+          <div class="plan-form">
+            <input id="plan-task" list="todo-options" placeholder="Pick from your to-dos, or type a new task" />
+            <datalist id="todo-options"></datalist>
+            <div class="plan-form-row">
+              <select id="plan-area" class="plan-area"></select>
+              <input id="plan-min" type="number" min="0" step="5" placeholder="min" class="plan-min" />
+              <button id="plan-add" class="btn primary plan-add">Add</button>
+            </div>
+          </div>
+          <div id="plan-list" class="plan-list"></div>
+        </div>
+
+        <!-- Timer -->
+        <div class="timer-card" id="timer-card">
+          <div id="timer-idle">
+            <button id="start-timer" class="btn primary block">▶ Start timer</button>
+            <button id="quick-add" class="btn ghost block">＋ Add a past block</button>
+          </div>
+          <div id="timer-running" class="hidden">
+            <div class="running-meta">
+              <div class="running-dot"></div>
+              <div>
+                <div id="running-label" class="running-label"></div>
+                <div id="running-elapsed" class="running-elapsed">0:00</div>
+              </div>
+            </div>
+            <button id="stop-timer" class="btn danger block">■ Stop &amp; save</button>
+          </div>
+        </div>
+
+        <!-- Logged today -->
+        <div class="section-row">
+          <h3>Logged today</h3>
+          <span class="muted small" id="today-total"></span>
+        </div>
+        <div id="today-list" class="entry-list"></div>
+
+        <!-- Planned vs actual -->
+        <div class="card">
+          <h3>Planned vs actual — today</h3>
+          <div id="pva"></div>
+        </div>
+      </section>
+
+      <!-- ---------- REPORTS ---------- -->
+      <section id="view-reports" class="view hidden">
+        <h2>Reports</h2>
+        <div class="card">
+          <h3>This week — actual vs target</h3>
+          <p class="muted small" id="report-score"></p>
+          <div id="avt-bars"></div>
+        </div>
+        <div class="card">
+          <h3>Weekly alignment trend</h3>
+          <div id="trend-line"></div>
+        </div>
+        <div class="card">
+          <h3>Daily alignment</h3>
+          <div id="heatmap"></div>
+        </div>
+      </section>
+
+      <!-- ---------- SETUP ---------- -->
+      <section id="view-setup" class="view hidden">
+        <h2>Setup</h2>
+        <div class="card">
+          <h3>Task categories &amp; targets</h3>
+          <p class="muted small">Add your categories. Set a weekly target % only on the important ones — leave the rest blank.</p>
+          <div id="areas-editor"></div>
+          <button id="add-area" class="btn ghost block">＋ Add category</button>
+          <button id="save-areas" class="btn primary block">Save</button>
+        </div>
+      </section>
+
+      <!-- ---------- TO-DOS ---------- -->
+      <section id="view-todos" class="view hidden">
+        <h2>To-Do list</h2>
+        <div class="card">
+          <p class="muted small">Your master task list. Add a task here or tap ＋ to drop it straight into today's plan. Tasks you type while planning are added here automatically.</p>
+          <div class="plan-form">
+            <input id="todo-new" placeholder="Add a task to your list" />
+            <div class="plan-form-row">
+              <select id="todo-area" class="plan-area"></select>
+              <input id="todo-min" type="number" min="0" step="5" placeholder="min" class="plan-min" />
+              <button id="todo-add" class="btn primary plan-add">Add</button>
+            </div>
+          </div>
+          <div id="todo-list" class="plan-list"></div>
+        </div>
+      </section>
+    </main>
+
+    <nav class="tabbar">
+      <button class="tab active" data-view="today">◴<span>Today</span></button>
+      <button class="tab" data-view="reports">📊<span>Reports</span></button>
+      <button class="tab" data-view="todos">📋<span>To-Dos</span></button>
+      <button class="tab" data-view="setup">⚙<span>Setup</span></button>
+    </nav>
+  </div>
+
+  <!-- ===================== PICKER MODAL ===================== -->
+  <div id="picker" class="modal hidden">
+    <div class="modal-card">
+      <div class="modal-head">
+        <h3 id="picker-title">Pick activity</h3>
+        <button id="picker-close" class="icon-btn">✕</button>
+      </div>
+      <label class="pk-label">Category</label>
+      <div id="picker-areas" class="picker-areas"></div>
+      <label class="pk-label">Task <span class="req">*required</span></label>
+      <input id="picker-note" placeholder="What are you working on? — e.g. CV review" />
+      <div id="picker-times" class="picker-times hidden">
+        <label class="row-field">Start <input id="pk-start" type="time" /></label>
+        <label class="row-field">End <input id="pk-end" type="time" /></label>
+      </div>
+      <button id="picker-confirm" class="btn primary block">Start</button>
+    </div>
+  </div>
+
+  <!-- ===================== EDITOR MODAL ===================== -->
+  <div id="editor" class="modal hidden">
+    <div class="modal-card">
+      <div class="modal-head">
+        <h3>Edit entry</h3>
+        <button id="editor-close" class="icon-btn">✕</button>
+      </div>
+      <label class="pk-label">Task</label>
+      <input id="ed-task" />
+      <label class="pk-label">Category</label>
+      <select id="ed-area"></select>
+      <label class="pk-label">Date</label>
+      <input id="ed-date" type="date" />
+      <div class="picker-times">
+        <label class="row-field">Start <input id="ed-start" type="time" /></label>
+        <label class="row-field">End <input id="ed-end" type="time" /></label>
+      </div>
+      <p class="muted small">Fix the end time here if a timer ran too long after you forgot to stop it.</p>
+      <button id="editor-save" class="btn primary block">Save changes</button>
+      <button id="editor-delete" class="btn ghost block">Delete entry</button>
+    </div>
+  </div>
+
+  <!-- ===================== CONFIRM MODAL ===================== -->
+  <div id="confirm" class="modal center hidden">
+    <div class="modal-card confirm-card">
+      <h3 id="confirm-msg">Delete?</h3>
+      <div class="confirm-actions">
+        <button id="confirm-cancel" class="btn ghost">Cancel</button>
+        <button id="confirm-ok" class="btn danger">Delete</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+
+  <script type="module" src="config.js"></script>
+  <script type="module" src="app.js"></script>
+</body>
+</html>
