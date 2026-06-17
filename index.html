@@ -119,14 +119,28 @@
       <section id="view-todos" class="view hidden">
         <h2>To-Do list</h2>
         <div class="card">
-          <p class="muted small">Your master task list. Add a task here or tap ＋ to drop it straight into today's plan. Tasks you type while planning are added here automatically.</p>
+          <p class="muted small">Your master task list. Tag a person to coordinate with, then filter by them. Tap ✎ to edit, ＋ to drop into today's plan.</p>
           <div class="plan-form">
             <input id="todo-new" placeholder="Add a task to your list" />
             <div class="plan-form-row">
               <select id="todo-area" class="plan-area"></select>
               <input id="todo-min" type="number" min="0" step="5" placeholder="min" class="plan-min" />
-              <button id="todo-add" class="btn primary plan-add">Add</button>
             </div>
+            <div class="plan-form-row">
+              <input id="todo-person" list="person-options" placeholder="People — comma separated (optional)" />
+              <input id="todo-due" type="date" class="plan-due" title="Deadline (optional)" />
+            </div>
+            <button id="todo-add" class="btn primary block">Add task</button>
+          </div>
+          <datalist id="person-options"></datalist>
+          <div class="todo-filter">
+            <label class="pk-label" for="todo-filter-person">Person</label>
+            <select id="todo-filter-person"><option value="">Everyone</option></select>
+            <label class="pk-label" for="todo-sort">Sort</label>
+            <select id="todo-sort">
+              <option value="title">A–Z</option>
+              <option value="due">By deadline</option>
+            </select>
           </div>
           <div id="todo-list" class="plan-list"></div>
         </div>
@@ -152,6 +166,8 @@
       <div id="picker-areas" class="picker-areas"></div>
       <label class="pk-label">Task <span class="req">*required</span></label>
       <input id="picker-note" placeholder="What are you working on? — e.g. CV review" />
+      <label class="pk-label">Coordinate with <span class="req">optional</span></label>
+      <input id="picker-person" list="person-options" placeholder="People — comma separated (optional)" />
       <div id="picker-times" class="picker-times hidden">
         <label class="row-field">Start <input id="pk-start" type="time" /></label>
         <label class="row-field">End <input id="pk-end" type="time" /></label>
@@ -183,6 +199,28 @@
     </div>
   </div>
 
+  <!-- ===================== TO-DO EDIT MODAL ===================== -->
+  <div id="todoedit" class="modal hidden">
+    <div class="modal-card">
+      <div class="modal-head">
+        <h3>Edit task</h3>
+        <button id="todoedit-close" class="icon-btn">✕</button>
+      </div>
+      <label class="pk-label">Task</label>
+      <input id="te-title" />
+      <label class="pk-label">Category</label>
+      <select id="te-area"></select>
+      <label class="pk-label">Coordinate with (people, comma separated)</label>
+      <input id="te-person" list="person-options" placeholder="e.g. Pratik, Pooja" />
+      <label class="pk-label">Deadline</label>
+      <input id="te-due" type="date" />
+      <label class="pk-label">Default minutes</label>
+      <input id="te-min" type="number" min="0" step="5" placeholder="0" />
+      <button id="todoedit-save" class="btn primary block">Save</button>
+      <button id="todoedit-delete" class="btn ghost block">Delete task</button>
+    </div>
+  </div>
+
   <!-- ===================== CONFIRM MODAL ===================== -->
   <div id="confirm" class="modal center hidden">
     <div class="modal-card confirm-card">
@@ -196,7 +234,7 @@
 
   <div id="toast" class="toast hidden"></div>
 
-  <script type="module" src="config.js"></script>
-  <script type="module" src="app.js"></script>
+  <script type="module" src="config.js?v=4"></script>
+  <script type="module" src="app.js?v=4"></script>
 </body>
 </html>

@@ -101,6 +101,15 @@ textarea{resize:vertical}
 .plan-item .play{color:var(--primary2)}
 .plan-item .toplan{color:var(--good);font-size:1.2rem;font-weight:700}
 .plan-item .planned-badge{color:var(--good);font-size:.78rem;font-weight:700;white-space:nowrap;padding:0 8px}
+.todo-filter{display:flex;align-items:center;gap:8px;margin:14px 0 10px;flex-wrap:wrap}
+.todo-filter .pk-label{margin:0;flex:none}
+.todo-filter select{flex:1;min-width:120px}
+.plan-item .person{color:var(--primary2)}
+.plan-due{flex:1}
+.due-badge{font-size:.72rem;font-weight:700;white-space:nowrap;padding:2px 8px;border-radius:999px;
+  background:var(--surface2);color:var(--muted)}
+.due-badge.overdue{background:rgba(239,68,68,.18);color:#fca5a5}
+.due-badge.soon{background:rgba(245,158,11,.18);color:#fcd34d}
 
 /* ---------- planned vs actual ---------- */
 .pva-foot{display:flex;justify-content:space-between;font-size:.85rem;padding:8px 2px 0;

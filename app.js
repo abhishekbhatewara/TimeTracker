@@ -18,6 +18,9 @@ const state = {
   running: null,
   pick: { areaId: null, mode: "timer" },
   editId: null,
+  todoEditId: null,
+  personFilter: "",
+  todoSort: "title",
   tick: null,
 };
 
@@ -38,6 +41,19 @@ const minutesOf = (e) => {
 };
 const localDateStr = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 const sameDay = (a, b) => localDateStr(a) === localDateStr(b);
+// Returns {text, cls} for a YYYY-MM-DD deadline, or null.
+function dueLabel(due) {
+  if (!due) return null;
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const d = new Date(due + "T00:00"); d.setHours(0, 0, 0, 0);
+  const days = Math.round((d - today) / 86400000);
+  const date = d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  if (days < 0) return { text: `⚑ ${days === -1 ? "Yesterday" : Math.abs(days) + "d overdue"} · ${date}`, cls: "overdue" };
+  if (days === 0) return { text: `⚑ Today · ${date}`, cls: "soon" };
+  if (days === 1) return { text: `⚑ Tomorrow · ${date}`, cls: "soon" };
+  if (days <= 3) return { text: `⚑ ${days}d · ${date}`, cls: "soon" };
+  return { text: `⚑ ${date}`, cls: "" };
+}
 const hhmm = (d) => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
 
 function weekStartOf(date) {
@@ -208,10 +224,10 @@ function renderPlan() {
     row.className = "plan-item";
     row.innerHTML = `<span class="dot" style="background:${a?.color || "#555"}"></span>
       <div class="body"><div class="title">${escapeHtml(pi.task)}</div>
-      <div class="sub">${a?.name || "—"} · ${pi.planned_min}m planned</div></div>
+      <div class="sub">${a?.name || "—"} · ${pi.planned_min}m planned${personsOf(pi).length ? ` · <span class="person">👤 ${escapeHtml(personsOf(pi).join(", "))}</span>` : ""}</div></div>
       <button class="iconaction play" title="Start timer">▶</button>
       <button class="iconaction del" title="Remove">✕</button>`;
-    row.querySelector(".play").onclick = () => startTimer(pi.area_id, pi.task);
+    row.querySelector(".play").onclick = () => startTimer(pi.area_id, pi.task, personsOf(pi));
     row.querySelector(".del").onclick = () => deletePlan(pi.id);
     box.appendChild(row);
   }
@@ -257,12 +273,12 @@ function renderPVA() {
 }
 
 // ===================================================== entry actions
-async function startTimer(areaId, note) {
+async function startTimer(areaId, note, persons = []) {
   if (state.running) { toast("Stop the running timer first"); return; }
   if (!areaId) { toast("Pick a category"); return; }
   if (!note || !note.trim()) { toast("Add a task name"); return; }
   const { data, error } = await sb.from("entries").insert({
-    user_id: state.user.id, area_id: areaId, note: note.trim(),
+    user_id: state.user.id, area_id: areaId, note: note.trim(), persons: persons || [],
     started_at: new Date().toISOString(), source: "timer",
   }).select().single();
   if (error) return toast(error.message);
@@ -277,9 +293,9 @@ async function stopTimer() {
   state.running.ended_at = end; state.running = null;
   render(); toast("Saved");
 }
-async function quickAdd(areaId, note, startISO, endISO) {
+async function quickAdd(areaId, note, persons, startISO, endISO) {
   const { data, error } = await sb.from("entries").insert({
-    user_id: state.user.id, area_id: areaId, note: note.trim(),
+    user_id: state.user.id, area_id: areaId, note: note.trim(), persons: persons || [],
     started_at: startISO, ended_at: endISO, source: "quick_add",
   }).select().single();
   if (error) return toast(error.message);
@@ -313,11 +329,12 @@ const todoByTitle = (title) =>
 const inTodayPlan = (title) =>
   state.plan.some((p) => p.task.trim().toLowerCase() === title.trim().toLowerCase());
 
-async function ensureTodo(title, areaId, min) {
+async function ensureTodo(title, areaId, min, persons = [], due = null) {
   const existing = todoByTitle(title);
   if (existing) return existing;
   const { data, error } = await sb.from("todos").insert({
-    user_id: state.user.id, title: title.trim(), area_id: areaId || null, default_min: min || 0,
+    user_id: state.user.id, title: title.trim(), area_id: areaId || null,
+    default_min: min || 0, persons: persons || [], due_date: due || null,
   }).select().single();
   if (error) { toast(error.message); return null; }
   state.todos.push(data);
@@ -343,7 +360,8 @@ async function addPlanItem() {
   const todo = await ensureTodo(task, areaId, min);   // create on the master list if new
   const { data, error } = await sb.from("plan_items").insert({
     user_id: state.user.id, date: localDateStr(new Date()), area_id: areaId,
-    task, planned_min: min, sort_order: state.plan.length + 1, todo_id: todo?.id || null,
+    task, planned_min: min, sort_order: state.plan.length + 1,
+    todo_id: todo?.id || null, persons: personsOf(todo),
   }).select().single();
   if (error) return toast(error.message);
   state.plan.push(data);
@@ -351,36 +369,108 @@ async function addPlanItem() {
   renderPlan(); renderPVA();
 }
 
-// ---------- to-do list management (Setup) ----------
+// ---------- people helpers ----------
+// Parse a free-text field ("Pratik & Pooja, Rohan") into a clean list of names.
+function parsePersons(str) {
+  return [...new Set((str || "").split(/[,&;]+/).map((s) => s.trim()).filter(Boolean))];
+}
+const personsOf = (row) => (row && Array.isArray(row.persons) ? row.persons : []);
+
+// ---------- to-do list management ----------
+function distinctPersons() {
+  const set = new Set();
+  for (const t of state.todos) for (const p of personsOf(t)) if (p.trim()) set.add(p.trim());
+  return [...set].sort((a, b) => a.localeCompare(b));
+}
+function renderPersonControls() {
+  const persons = distinctPersons();
+  $("#person-options").innerHTML = persons.map((p) => `<option value="${escapeAttr(p)}">`).join("");
+  const sel = $("#todo-filter-person");
+  if (sel) {
+    sel.innerHTML = `<option value="">Everyone</option>` +
+      persons.map((p) => `<option value="${escapeAttr(p)}"${p === state.personFilter ? " selected" : ""}>${escapeHtml(p)}</option>`).join("");
+  }
+}
 function renderTodos() {
   fillAreaSelect($("#todo-area"));
+  renderPersonControls();
   const box = $("#todo-list"); box.innerHTML = "";
-  for (const t of state.todos) {
+  let list = state.todos.filter((t) => !state.personFilter || personsOf(t).includes(state.personFilter));
+  if (state.todoSort === "due") {
+    // soonest deadline first; tasks without a deadline go last
+    list = [...list].sort((a, b) =>
+      (a.due_date || "9999-12-31").localeCompare(b.due_date || "9999-12-31") ||
+      a.title.localeCompare(b.title));
+  }
+  for (const t of list) {
     const a = areaById(t.area_id);
     const planned = inTodayPlan(t.title);
+    const due = dueLabel(t.due_date);
+    const ppl = personsOf(t);
+    const sub = [a?.name || "No category", t.default_min ? t.default_min + "m" : null,
+      ppl.length ? `👤 ${escapeHtml(ppl.join(", "))}` : null].filter(Boolean).join(" · ");
     const row = document.createElement("div");
     row.className = "plan-item";
     row.innerHTML = `<span class="dot" style="background:${a?.color || "#555"}"></span>
       <div class="body"><div class="title">${escapeHtml(t.title)}</div>
-      <div class="sub">${a?.name || "No category"}${t.default_min ? " · " + t.default_min + "m" : ""}</div></div>
+      <div class="sub">${sub}</div></div>
+      ${due ? `<span class="due-badge ${due.cls}">${due.text}</span>` : ""}
+      <button class="iconaction edit" title="Edit">✎</button>
       ${planned
         ? `<span class="planned-badge" title="Already in today's plan">✓ Planned</span>`
         : `<button class="iconaction toplan" title="Add to today's plan">＋</button>`}
       <button class="iconaction del" title="Remove">✕</button>`;
+    row.querySelector(".edit").onclick = () => openTodoEditor(t);
     if (!planned) row.querySelector(".toplan").onclick = () => addTodoToPlan(t);
     row.querySelector(".del").onclick = () => deleteTodo(t.id);
     box.appendChild(row);
   }
-  if (!state.todos.length) box.innerHTML = `<div class="empty">No tasks yet. Add them above or paste your list.</div>`;
+  if (!list.length) box.innerHTML = `<div class="empty">${state.personFilter ? "No tasks for this person." : "No tasks yet. Add them above or paste your list."}</div>`;
 }
 async function addTodo() {
   const title = $("#todo-new").value.trim();
   if (!title) return toast("Enter a task");
   if (todoByTitle(title)) { $("#todo-new").value = ""; return toast("Already on your list"); }
-  const t = await ensureTodo(title, $("#todo-area").value, Number($("#todo-min").value) || 0);
+  const persons = parsePersons($("#todo-person").value);
+  const due = $("#todo-due").value || null;
+  const t = await ensureTodo(title, $("#todo-area").value, Number($("#todo-min").value) || 0, persons, due);
   if (!t) return;
-  $("#todo-new").value = ""; $("#todo-min").value = "";
+  $("#todo-new").value = ""; $("#todo-min").value = ""; $("#todo-person").value = ""; $("#todo-due").value = "";
   renderTodos(); renderPlan();
+}
+// ---------- to-do editor ----------
+function openTodoEditor(t) {
+  state.todoEditId = t.id;
+  $("#te-title").value = t.title;
+  fillAreaSelect($("#te-area"), t.area_id);
+  $("#te-person").value = personsOf(t).join(", ");
+  $("#te-due").value = t.due_date || "";
+  $("#te-min").value = t.default_min || "";
+  $("#todoedit").classList.remove("hidden");
+}
+function closeTodoEditor() { $("#todoedit").classList.add("hidden"); state.todoEditId = null; }
+async function saveTodoEditor() {
+  const t = state.todos.find((x) => x.id === state.todoEditId);
+  if (!t) return closeTodoEditor();
+  const title = $("#te-title").value.trim();
+  if (!title) return toast("Task name required");
+  const clash = state.todos.find((x) => x.id !== t.id && x.title.trim().toLowerCase() === title.toLowerCase());
+  if (clash) return toast("Another task already has that name");
+  const payload = {
+    title, area_id: $("#te-area").value || null,
+    persons: parsePersons($("#te-person").value), default_min: Number($("#te-min").value) || 0,
+    due_date: $("#te-due").value || null,
+  };
+  const { data, error } = await sb.from("todos").update(payload).eq("id", t.id).select().single();
+  if (error) return toast(error.message);
+  Object.assign(t, data);
+  state.todos.sort((a, b) => a.title.localeCompare(b.title));
+  closeTodoEditor(); renderTodos(); renderPlan(); toast("Saved");
+}
+async function deleteFromTodoEditor() {
+  const id = state.todoEditId;
+  closeTodoEditor();
+  if (id) await deleteTodo(id);
 }
 async function addTodoToPlan(t) {
   if (state.plan.some((p) => p.task.trim().toLowerCase() === t.title.trim().toLowerCase())) {
@@ -388,7 +478,8 @@ async function addTodoToPlan(t) {
   }
   const { data, error } = await sb.from("plan_items").insert({
     user_id: state.user.id, date: localDateStr(new Date()), area_id: t.area_id,
-    task: t.title, planned_min: t.default_min || 0, sort_order: state.plan.length + 1, todo_id: t.id,
+    task: t.title, planned_min: t.default_min || 0, sort_order: state.plan.length + 1,
+    todo_id: t.id, persons: personsOf(t),
   }).select().single();
   if (error) return toast(error.message);
   state.plan.push(data);
@@ -434,7 +525,8 @@ function openPicker(mode) {
   $("#picker-title").textContent = mode === "timer" ? "Start timer" : "Add a past block";
   $("#picker-confirm").textContent = mode === "timer" ? "Start" : "Add block";
   $("#picker-times").classList.toggle("hidden", mode === "timer");
-  $("#picker-note").value = "";
+  $("#picker-note").value = ""; $("#picker-person").value = "";
+  renderPersonControls();
   if (mode === "quick") {
     const now = new Date(); const h = new Date(now - 30 * 60000);
     $("#pk-start").value = hhmm(h); $("#pk-end").value = hhmm(now);
@@ -457,14 +549,15 @@ function confirmPicker() {
   if (!state.pick.areaId) return toast("Pick a category");
   const note = $("#picker-note").value.trim();
   if (!note) return toast("Task is required");
+  const persons = parsePersons($("#picker-person").value);
   if (state.pick.mode === "timer") {
-    startTimer(state.pick.areaId, note);
+    startTimer(state.pick.areaId, note, persons);
   } else {
     const today = localDateStr(new Date());
     const s = new Date(`${today}T${$("#pk-start").value || "00:00"}`);
     const e = new Date(`${today}T${$("#pk-end").value || "00:00"}`);
     if (e <= s) return toast("End must be after start");
-    quickAdd(state.pick.areaId, note, s.toISOString(), e.toISOString());
+    quickAdd(state.pick.areaId, note, persons, s.toISOString(), e.toISOString());
   }
   closePicker();
 }
@@ -655,6 +748,12 @@ function bind() {
   $("#plan-task").addEventListener("keydown", (e) => { if (e.key === "Enter") addPlanItem(); });
   $("#todo-add").onclick = addTodo;
   $("#todo-new").addEventListener("keydown", (e) => { if (e.key === "Enter") addTodo(); });
+  $("#todo-person").addEventListener("keydown", (e) => { if (e.key === "Enter") addTodo(); });
+  $("#todo-filter-person").addEventListener("change", (e) => { state.personFilter = e.target.value; renderTodos(); });
+  $("#todo-sort").addEventListener("change", (e) => { state.todoSort = e.target.value; renderTodos(); });
+  $("#todoedit-close").onclick = closeTodoEditor;
+  $("#todoedit-save").onclick = saveTodoEditor;
+  $("#todoedit-delete").onclick = deleteFromTodoEditor;
   $("#editor-close").onclick = closeEditor;
   $("#editor-save").onclick = saveEditor;
   $("#editor-delete").onclick = deleteFromEditor;
