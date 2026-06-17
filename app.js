@@ -213,8 +213,7 @@ function renderTodayList() {
 // ---------- plan ----------
 function renderPlan() {
   fillAreaSelect($("#plan-area"));
-  $("#todo-options").innerHTML = state.todos
-    .map((t) => `<option value="${escapeAttr(t.title)}">`).join("");
+  fillPlanTodoOptions();
   const box = $("#plan-list"); box.innerHTML = "";
   let totalMin = 0;
   for (const pi of state.plan) {
@@ -340,6 +339,14 @@ async function ensureTodo(title, areaId, min, persons = [], due = null) {
   state.todos.push(data);
   state.todos.sort((a, b) => a.title.localeCompare(b.title));
   return data;
+}
+
+// Narrow the task suggestions to the chosen category, so picking from a long
+// list is easy: pick category → only its tasks suggest. Blank category = all.
+function fillPlanTodoOptions() {
+  const aid = $("#plan-area").value;
+  const list = state.todos.filter((t) => !aid || t.area_id === aid);
+  $("#todo-options").innerHTML = list.map((t) => `<option value="${escapeAttr(t.title)}">`).join("");
 }
 
 // When a to-do is picked in the plan box, prefill its category + minutes.
@@ -606,29 +613,107 @@ async function deleteFromEditor() {
 
 // ===================================================== REPORTS
 function renderReports() {
-  const { list } = weekEntries();
-  const { score, total, byArea } = alignmentScore(list);
-  $("#report-score").textContent = score == null
-    ? "No time logged this week yet."
-    : `Weekly alignment: ${Math.round(score)}/100 · ${fmtDur(total)} tracked`;
-  renderAVT(total, byArea);
-  renderTrendLine();
   renderHeatmap();
+  renderDayDetail(localDateStr(new Date()));   // today's report by default
+  $("#week-report").innerHTML = periodSummaryHTML(weekEntries().list, { withAlignment: true });
+  $("#month-report").innerHTML = periodSummaryHTML(monthEntries(), { withAlignment: true });
+  renderAnalysis();
+  renderTrendLine();
 }
-function renderAVT(total, byArea) {
-  const box = $("#avt-bars"); box.innerHTML = "";
-  const targeted = state.areas.filter(hasTarget);
-  if (!targeted.length) { box.innerHTML = `<div class="empty">Set a target on an important category in Setup to track it here.</div>`; return; }
-  if (!total) { box.innerHTML = `<div class="empty">No time logged this week.</div>`; return; }
-  for (const a of targeted) {
-    const actual = ((byArea.get(a.id) || 0) / total) * 100;
-    const diff = Math.round(actual - a.target_pct);
-    box.insertAdjacentHTML("beforeend", `<div class="avt">
-      <div class="avt-top"><span><span class="dot" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${a.color};margin-right:6px"></span>${a.name}</span>
-        <span class="muted">${Math.round(actual)}% / ${a.target_pct}% <span class="${diff >= 0 ? "over" : "under"}">(${diff >= 0 ? "+" : ""}${diff})</span></span></div>
-      <div class="track"><div class="fill" style="width:${Math.min(100, actual)}%;background:${a.color}"></div>
-        <div class="tmark" style="left:${Math.min(100, a.target_pct)}%"></div></div></div>`);
+
+function monthEntries() {
+  const now = new Date();
+  const from = new Date(now.getFullYear(), now.getMonth(), 1);
+  const to = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+  return entriesInRange(from, to);
+}
+
+// Reusable summary block: total, alignment (optional), category bars, top tasks.
+function periodSummaryHTML(rangeEntries, opts = {}) {
+  const done = rangeEntries.filter((e) => e.ended_at);
+  let total = 0; const byArea = new Map(); const byTask = new Map();
+  for (const e of done) {
+    const m = minutesOf(e); if (m <= 0) continue;
+    total += m;
+    const ak = areaById(e.area_id) ? e.area_id : "__none__";   // merge archived/unknown
+    byArea.set(ak, (byArea.get(ak) || 0) + m);
+    const k = (e.note || "").trim() || "(untitled)";
+    byTask.set(k, (byTask.get(k) || 0) + m);
   }
+  if (total <= 0) return `<div class="empty">No time logged.</div>`;
+  let html = `<div class="rep-total">${fmtDur(total)} tracked</div>`;
+  if (opts.withAlignment && state.areas.some(hasTarget)) {
+    const { score } = alignmentScore(done);
+    if (score != null) html += `<div class="muted small" style="margin:-4px 0 10px">Alignment ${Math.round(score)}/100 vs your targets</div>`;
+  }
+  const cats = [...byArea.entries()].map(([id, m]) => ({ a: areaById(id), m }))
+    .filter((c) => Math.round(c.m) >= 1).sort((x, y) => y.m - x.m);
+  const maxCat = cats[0].m;
+  html += `<div class="rep-bars">`;
+  for (const { a, m } of cats) {
+    html += `<div class="repbar"><div class="repbar-top">
+      <span><span class="dot" style="background:${a?.color || "#777"}"></span>${a ? escapeHtml(a.name) : "No category"}</span>
+      <span class="muted">${fmtDur(m)} · ${Math.round(m / total * 100)}%</span></div>
+      <div class="track"><div class="fill" style="width:${m / maxCat * 100}%;background:${a?.color || "#888"}"></div></div></div>`;
+  }
+  html += `</div>`;
+  const tasks = [...byTask.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
+  html += `<div class="rep-sub">Most time on</div><ol class="rep-tasks">`;
+  for (const [note, m] of tasks) html += `<li><span>${escapeHtml(note)}</span><span class="muted">${fmtDur(m)}</span></li>`;
+  html += `</ol>`;
+  return html;
+}
+
+function renderDayDetail(dateStr) {
+  const d = new Date(dateStr + "T00:00"); const next = new Date(d); next.setDate(next.getDate() + 1);
+  const head = `<div class="rep-dayhead">${d.toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" })}</div>`;
+  $("#day-detail").innerHTML = head + periodSummaryHTML(entriesInRange(d, next));
+}
+
+function renderAnalysis() {
+  const from = new Date(); from.setHours(0, 0, 0, 0); from.setDate(from.getDate() - 29);
+  const to = new Date(); to.setDate(to.getDate() + 1);
+  const done = entriesInRange(from, to).filter((e) => e.ended_at);
+  const box = $("#analysis");
+  let total = 0; const byArea = new Map(); const byTask = new Map();
+  for (const e of done) {
+    const m = minutesOf(e); if (m <= 0) continue;
+    total += m;
+    const ak = areaById(e.area_id) ? e.area_id : "__none__";
+    byArea.set(ak, (byArea.get(ak) || 0) + m);
+    const k = (e.note || "").trim() || "(untitled)";
+    byTask.set(k, (byTask.get(k) || 0) + m);
+  }
+  let html = "";
+  if (total > 0) {
+    const [topId, topMin] = [...byArea.entries()].sort((a, b) => b[1] - a[1])[0];
+    const topA = areaById(topId);
+    html += `<div class="ana-item"><div class="ana-k">Most time on</div>
+      <div class="ana-v"><span class="dot" style="background:${topA?.color || "#777"}"></span>${topA ? escapeHtml(topA.name) : "No category"} · ${fmtDur(topMin)} (${Math.round(topMin / total * 100)}%)</div></div>`;
+    const topTasks = [...byTask.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
+    html += `<div class="ana-item"><div class="ana-k">Top tasks by time</div><ol class="rep-tasks">` +
+      topTasks.map(([n, m]) => `<li><span>${escapeHtml(n)}</span><span class="muted">${fmtDur(m)}</span></li>`).join("") + `</ol></div>`;
+  } else {
+    html += `<div class="ana-item muted small">No time logged in the last 30 days yet.</div>`;
+  }
+  // important-category tasks with no logged time at all (across loaded history)
+  const targetIds = new Set(state.areas.filter(hasTarget).map((a) => a.id));
+  if (targetIds.size) {
+    const loggedNotes = new Set(state.entries.filter((e) => e.ended_at).map((e) => (e.note || "").trim().toLowerCase()));
+    const notDone = state.todos.filter((t) => targetIds.has(t.area_id) && !loggedNotes.has(t.title.trim().toLowerCase()));
+    html += `<div class="ana-item"><div class="ana-k">Not started — important categories</div>`;
+    if (notDone.length) {
+      html += `<ul class="rep-tasks">` + notDone.slice(0, 12).map((t) => {
+        const a = areaById(t.area_id);
+        return `<li><span><span class="dot" style="background:${a?.color || "#777"}"></span>${escapeHtml(t.title)}</span><span class="muted">${a ? escapeHtml(a.name) : ""}</span></li>`;
+      }).join("") + `</ul>`;
+      if (notDone.length > 12) html += `<div class="muted small">+${notDone.length - 12} more</div>`;
+    } else html += `<div class="muted small">Every important-category task has some logged time. 🎉</div>`;
+    html += `</div>`;
+  } else {
+    html += `<div class="ana-item muted small">Tip: set weekly targets on your important categories (Setup) to track which of their tasks are still untouched.</div>`;
+  }
+  box.innerHTML = html;
 }
 function renderTrendLine() {
   const weeks = [];
@@ -653,19 +738,29 @@ function renderTrendLine() {
     <text x="${W - p}" y="${H - 1}" font-size="8" fill="var(--muted)" text-anchor="end">this wk</text></svg>`;
 }
 function renderHeatmap() {
+  const box = $("#heatmap");
+  const today = localDateStr(new Date());
   let html = `<div class="heat">`;
   for (let i = 69; i >= 0; i--) {
     const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - i);
     const next = new Date(d); next.setDate(next.getDate() + 1);
+    const ds = localDateStr(d);
     const { score } = alignmentScore(entriesInRange(d, next));
     let bg = "var(--surface2)";
     if (score != null) {
       const col = score >= 80 ? "16,185,129" : score >= 60 ? "129,140,248" : score >= 40 ? "245,158,11" : "239,68,68";
       bg = `rgba(${col},${0.35 + (score / 100) * 0.6})`;
     }
-    html += `<div class="cell" title="${d.toLocaleDateString()}: ${score == null ? "no data" : Math.round(score)}" style="background:${bg}"></div>`;
+    html += `<div class="cell${ds === today ? " sel" : ""}" data-date="${ds}" title="${d.toLocaleDateString()}: ${score == null ? "no data" : Math.round(score)}" style="background:${bg}"></div>`;
   }
-  $("#heatmap").innerHTML = html + `</div>`;
+  box.innerHTML = html + `</div>`;
+  box.querySelectorAll(".cell").forEach((c) => {
+    c.onclick = () => {
+      box.querySelectorAll(".cell").forEach((x) => x.classList.remove("sel"));
+      c.classList.add("sel");
+      renderDayDetail(c.dataset.date);
+    };
+  });
 }
 
 // ===================================================== SETUP
@@ -791,6 +886,7 @@ function bind() {
   $("#picker-close").onclick = closePicker;
   $("#picker-confirm").onclick = confirmPicker;
   $("#plan-add").onclick = addPlanItem;
+  $("#plan-area").addEventListener("change", fillPlanTodoOptions);
   $("#plan-task").addEventListener("input", onPlanTaskInput);
   $("#plan-task").addEventListener("keydown", (e) => { if (e.key === "Enter") addPlanItem(); });
   $("#todo-add").onclick = addTodo;

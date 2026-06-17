@@ -137,7 +137,27 @@ textarea{resize:vertical}
 
 /* ---------- heatmap ---------- */
 .heat{display:flex;flex-wrap:wrap;gap:4px}
-.heat .cell{width:13px;height:13px;border-radius:3px;background:var(--surface2)}
+.heat .cell{width:15px;height:15px;border-radius:3px;background:var(--surface2);cursor:pointer}
+.heat .cell.sel{outline:2px solid var(--txt);outline-offset:1px}
+
+/* ---------- report blocks ---------- */
+.report-detail{margin-top:14px;border-top:1px solid var(--line);padding-top:12px}
+.rep-dayhead{font-weight:700;margin-bottom:8px}
+.rep-total{font-size:1.15rem;font-weight:800;margin-bottom:8px}
+.rep-bars{display:flex;flex-direction:column;gap:9px;margin:6px 0 4px}
+.repbar-top{display:flex;justify-content:space-between;font-size:.85rem;margin-bottom:4px}
+.repbar-top .dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:7px}
+.repbar .track{height:8px;background:var(--surface2);border-radius:5px;overflow:hidden}
+.repbar .fill{height:100%;border-radius:5px}
+.rep-sub,.ana-k{font-size:.72rem;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);
+  font-weight:700;margin:14px 0 6px}
+.rep-tasks{margin:0;padding-left:0;list-style:none;display:flex;flex-direction:column;gap:5px}
+.rep-tasks li{display:flex;justify-content:space-between;gap:12px;font-size:.9rem}
+.rep-tasks li > span:first-child{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rep-tasks .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:7px}
+.ana-item{margin-bottom:14px}
+.ana-v{display:flex;align-items:center;font-weight:600}
+.ana-v .dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:8px}
 
 /* ---------- setup ---------- */
 .area-edit{display:flex;align-items:center;gap:8px;margin-bottom:8px}

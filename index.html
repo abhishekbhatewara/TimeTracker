@@ -89,17 +89,25 @@
       <section id="view-reports" class="view hidden">
         <h2>Reports</h2>
         <div class="card">
-          <h3>This week — actual vs target</h3>
-          <p class="muted small" id="report-score"></p>
-          <div id="avt-bars"></div>
+          <h3>Daily <span class="muted small">— tap a day</span></h3>
+          <div id="heatmap"></div>
+          <div id="day-detail" class="report-detail"></div>
+        </div>
+        <div class="card">
+          <h3>This week</h3>
+          <div id="week-report"></div>
+        </div>
+        <div class="card">
+          <h3>This month</h3>
+          <div id="month-report"></div>
+        </div>
+        <div class="card">
+          <h3>Analysis <span class="muted small">— last 30 days</span></h3>
+          <div id="analysis"></div>
         </div>
         <div class="card">
           <h3>Weekly alignment trend</h3>
           <div id="trend-line"></div>
-        </div>
-        <div class="card">
-          <h3>Daily alignment</h3>
-          <div id="heatmap"></div>
         </div>
       </section>
 
@@ -251,7 +259,7 @@
 
   <div id="toast" class="toast hidden"></div>
 
-  <script type="module" src="config.js?v=5"></script>
-  <script type="module" src="app.js?v=5"></script>
+  <script type="module" src="config.js?v=6"></script>
+  <script type="module" src="app.js?v=6"></script>
 </body>
 </html>
