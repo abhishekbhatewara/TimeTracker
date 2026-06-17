@@ -213,7 +213,10 @@ function renderTodayList() {
 
 // ---------- plan ----------
 function renderPlan() {
-  fillAreaSelect($("#plan-area"));
+  const pa = $("#plan-area"); const prev = pa.value;
+  pa.innerHTML = `<option value="">All categories</option>` +
+    state.areas.map((a) => `<option value="${a.id}">${escapeHtml(a.name)}</option>`).join("");
+  pa.value = prev;   // preserve choice; "" (All) on first render
   fillPlanTodoOptions();
   const box = $("#plan-list"); box.innerHTML = "";
   let totalMin = 0;
@@ -288,10 +291,12 @@ async function startTimer(areaId, note, persons = []) {
 async function stopTimer() {
   if (!state.running) return;
   const end = new Date().toISOString();
+  const note = state.running.note;
   const { error } = await sb.from("entries").update({ ended_at: end }).eq("id", state.running.id);
   if (error) return toast(error.message);
   state.running.ended_at = end; state.running = null;
   render(); toast("Saved");
+  await maybeAskDone(note);
 }
 async function quickAdd(areaId, note, persons, startISO, endISO) {
   const { data, error } = await sb.from("entries").insert({
@@ -301,6 +306,18 @@ async function quickAdd(areaId, note, persons, startISO, endISO) {
   if (error) return toast(error.message);
   state.entries.unshift(data);
   render(); toast("Block added");
+  await maybeAskDone(note);
+}
+// After logging time on a task that matches an existing to-do, offer to mark it done.
+async function maybeAskDone(note) {
+  const t = todoByTitle((note || "").trim());
+  if (!t || t.done_at) return;
+  if (await askConfirm(`Logged time on “${t.title}”. Mark it done?`, "Mark done")) {
+    const ts = new Date().toISOString();
+    const { error } = await sb.from("todos").update({ done_at: ts }).eq("id", t.id);
+    if (error) return toast(error.message);
+    t.done_at = ts; renderTodos(); toast("Marked done");
+  }
 }
 async function deleteEntry(id) {
   const e = state.entries.find((x) => x.id === id);
@@ -556,6 +573,9 @@ function openPicker(mode) {
   $("#picker-times").classList.toggle("hidden", mode === "timer");
   $("#picker-note").value = ""; $("#picker-person").value = "";
   renderPersonControls();
+  // existing tasks to pick from (avoids duplicates) — active, not done
+  $("#picker-todo-options").innerHTML = state.todos
+    .filter((t) => !t.done_at).map((t) => `<option value="${escapeAttr(t.title)}">`).join("");
   if (mode === "quick") {
     const now = new Date(); const h = new Date(now - 30 * 60000);
     $("#pk-start").value = hhmm(h); $("#pk-end").value = hhmm(now);
@@ -563,7 +583,7 @@ function openPicker(mode) {
   const box = $("#picker-areas"); box.innerHTML = "";
   for (const a of state.areas) {
     const b = document.createElement("button");
-    b.className = "pk-area";
+    b.className = "pk-area"; b.dataset.aid = a.id;
     b.innerHTML = `<span class="dot" style="background:${a.color}"></span>${a.name}`;
     b.onclick = () => {
       $$(".pk-area", box).forEach((x) => x.classList.remove("sel"));
@@ -572,6 +592,17 @@ function openPicker(mode) {
     box.appendChild(b);
   }
   $("#picker").classList.remove("hidden");
+}
+// Picking an existing task in the picker auto-selects its category pill + fills people.
+function onPickerNoteInput() {
+  const t = todoByTitle($("#picker-note").value);
+  if (!t) return;
+  if (t.area_id) {
+    const box = $("#picker-areas");
+    $$(".pk-area", box).forEach((x) => x.classList.toggle("sel", x.dataset.aid === t.area_id));
+    state.pick.areaId = t.area_id;
+  }
+  if (personsOf(t).length && !$("#picker-person").value.trim()) $("#picker-person").value = personsOf(t).join(", ");
 }
 function closePicker() { $("#picker").classList.add("hidden"); }
 function confirmPicker() {
@@ -903,6 +934,7 @@ function bind() {
   $("#stop-timer").onclick = stopTimer;
   $("#picker-close").onclick = closePicker;
   $("#picker-confirm").onclick = confirmPicker;
+  $("#picker-note").addEventListener("input", onPickerNoteInput);
   $("#plan-add").onclick = addPlanItem;
   $("#plan-area").addEventListener("change", fillPlanTodoOptions);
   $("#plan-task").addEventListener("input", onPlanTaskInput);

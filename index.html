@@ -175,7 +175,8 @@
       <label class="pk-label">Category</label>
       <div id="picker-areas" class="picker-areas"></div>
       <label class="pk-label">Task <span class="req">*required</span></label>
-      <input id="picker-note" placeholder="What are you working on? — e.g. CV review" />
+      <input id="picker-note" list="picker-todo-options" placeholder="Pick an existing task, or type a new one" />
+      <datalist id="picker-todo-options"></datalist>
       <label class="pk-label">Coordinate with <span class="req">optional</span></label>
       <input id="picker-person" list="person-options" placeholder="People — comma separated (optional)" />
       <div id="picker-times" class="picker-times hidden">
@@ -260,7 +261,7 @@
 
   <div id="toast" class="toast hidden"></div>
 
-  <script type="module" src="config.js?v=7"></script>
-  <script type="module" src="app.js?v=7"></script>
+  <script type="module" src="config.js?v=8"></script>
+  <script type="module" src="app.js?v=8"></script>
 </body>
 </html>
