@@ -100,6 +100,15 @@ textarea{resize:vertical}
 .plan-item .iconaction{background:none;border:none;color:var(--muted);font-size:1rem;padding:4px 6px}
 .plan-item .play{color:var(--primary2)}
 .plan-item .toplan{color:var(--good);font-size:1.2rem;font-weight:700}
+.done-toggle{flex:none;width:22px;height:22px;border-radius:50%;border:2px solid var(--line);
+  background:transparent;color:#fff;font-size:.8rem;font-weight:800;display:flex;
+  align-items:center;justify-content:center;cursor:pointer;padding:0}
+.done-toggle.done{background:var(--good);border-color:var(--good)}
+.plan-item.is-done{opacity:.6}
+.title.struck{text-decoration:line-through;color:var(--muted)}
+.show-done{display:flex;align-items:center;gap:5px;font-size:.8rem;color:var(--muted);
+  flex:none;cursor:pointer;white-space:nowrap}
+.show-done input{width:auto;margin:0}
 .plan-item .planned-badge{color:var(--good);font-size:.78rem;font-weight:700;white-space:nowrap;padding:0 8px}
 .todo-filter{display:flex;align-items:center;gap:8px;margin:14px 0 10px;flex-wrap:wrap}
 .todo-filter .pk-label{margin:0;flex:none}

@@ -21,6 +21,7 @@ const state = {
   todoEditId: null,
   personFilter: "",
   todoSort: "title",
+  showDone: false,
   tick: null,
 };
 
@@ -345,7 +346,7 @@ async function ensureTodo(title, areaId, min, persons = [], due = null) {
 // list is easy: pick category → only its tasks suggest. Blank category = all.
 function fillPlanTodoOptions() {
   const aid = $("#plan-area").value;
-  const list = state.todos.filter((t) => !aid || t.area_id === aid);
+  const list = state.todos.filter((t) => !t.done_at && (!aid || t.area_id === aid));
   $("#todo-options").innerHTML = list.map((t) => `<option value="${escapeAttr(t.title)}">`).join("");
 }
 
@@ -402,7 +403,10 @@ function renderTodos() {
   fillAreaSelect($("#todo-area"));
   renderPersonControls();
   const box = $("#todo-list"); box.innerHTML = "";
+  const doneCount = state.todos.filter((t) => t.done_at).length;
+  $("#showdone-label").textContent = `Show done${doneCount ? ` (${doneCount})` : ""}`;
   let list = state.todos.filter((t) => !state.personFilter || personsOf(t).includes(state.personFilter));
+  if (!state.showDone) list = list.filter((t) => !t.done_at);
   if (state.todoSort === "due") {
     // soonest deadline first; tasks without a deadline go last
     list = [...list].sort((a, b) =>
@@ -420,19 +424,22 @@ function renderTodos() {
     const ppl = personsOf(t);
     const sub = [a?.name || "No category", t.default_min ? t.default_min + "m" : null,
       ppl.length ? `👤 ${escapeHtml(ppl.join(", "))}` : null].filter(Boolean).join(" · ");
+    const isDone = !!t.done_at;
     const row = document.createElement("div");
-    row.className = "plan-item";
-    row.innerHTML = `<span class="dot" style="background:${a?.color || "#555"}"></span>
-      <div class="body"><div class="title">${escapeHtml(t.title)}</div>
+    row.className = "plan-item" + (isDone ? " is-done" : "");
+    row.innerHTML = `<button class="done-toggle${isDone ? " done" : ""}" title="${isDone ? "Mark not done" : "Mark done"}">${isDone ? "✓" : ""}</button>
+      <span class="dot" style="background:${a?.color || "#555"}"></span>
+      <div class="body"><div class="title${isDone ? " struck" : ""}">${escapeHtml(t.title)}</div>
       <div class="sub">${sub}</div></div>
-      ${due ? `<span class="due-badge ${due.cls}">${due.text}</span>` : ""}
+      ${due && !isDone ? `<span class="due-badge ${due.cls}">${due.text}</span>` : ""}
       <button class="iconaction edit" title="Edit">✎</button>
-      ${planned
-        ? `<span class="planned-badge" title="Already in today's plan">✓ Planned</span>`
+      ${isDone || planned
+        ? (planned && !isDone ? `<span class="planned-badge" title="Already in today's plan">✓ Planned</span>` : "")
         : `<button class="iconaction toplan" title="Add to today's plan">＋</button>`}
       <button class="iconaction del" title="Remove">✕</button>`;
+    row.querySelector(".done-toggle").onclick = () => toggleDone(t);
     row.querySelector(".edit").onclick = () => openTodoEditor(t);
-    if (!planned) row.querySelector(".toplan").onclick = () => addTodoToPlan(t);
+    if (!isDone && !planned) row.querySelector(".toplan").onclick = () => addTodoToPlan(t);
     row.querySelector(".del").onclick = () => deleteTodo(t.id);
     box.appendChild(row);
   }
@@ -495,6 +502,17 @@ async function addTodoToPlan(t) {
   if (error) return toast(error.message);
   state.plan.push(data);
   renderPlan(); renderPVA(); renderTodos(); toast("Added to today's plan");
+}
+async function toggleDone(t) {
+  const newVal = t.done_at ? null : new Date().toISOString();
+  const { error } = await sb.from("todos").update({ done_at: newVal }).eq("id", t.id);
+  if (error) return toast(error.message);
+  t.done_at = newVal;
+  renderTodos();
+  if (newVal) toastUndo("Marked done", async () => {
+    await sb.from("todos").update({ done_at: null }).eq("id", t.id);
+    t.done_at = null; renderTodos();
+  });
 }
 async function deleteTodo(id) {
   const t = state.todos.find((x) => x.id === id);
@@ -700,7 +718,7 @@ function renderAnalysis() {
   const targetIds = new Set(state.areas.filter(hasTarget).map((a) => a.id));
   if (targetIds.size) {
     const loggedNotes = new Set(state.entries.filter((e) => e.ended_at).map((e) => (e.note || "").trim().toLowerCase()));
-    const notDone = state.todos.filter((t) => targetIds.has(t.area_id) && !loggedNotes.has(t.title.trim().toLowerCase()));
+    const notDone = state.todos.filter((t) => targetIds.has(t.area_id) && !t.done_at && !loggedNotes.has(t.title.trim().toLowerCase()));
     html += `<div class="ana-item"><div class="ana-k">Not started — important categories</div>`;
     if (notDone.length) {
       html += `<ul class="rep-tasks">` + notDone.slice(0, 12).map((t) => {
@@ -894,6 +912,7 @@ function bind() {
   $("#todo-person").addEventListener("keydown", (e) => { if (e.key === "Enter") addTodo(); });
   $("#todo-filter-person").addEventListener("change", (e) => { state.personFilter = e.target.value; renderTodos(); });
   $("#todo-sort").addEventListener("change", (e) => { state.todoSort = e.target.value; renderTodos(); });
+  $("#todo-showdone").addEventListener("change", (e) => { state.showDone = e.target.checked; renderTodos(); });
   $("#todoedit-close").onclick = closeTodoEditor;
   $("#todoedit-save").onclick = saveTodoEditor;
   $("#todoedit-delete").onclick = deleteFromTodoEditor;
