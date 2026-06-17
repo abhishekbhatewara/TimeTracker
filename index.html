@@ -140,6 +140,7 @@
             <select id="todo-sort">
               <option value="title">A–Z</option>
               <option value="due">By deadline</option>
+              <option value="category">By category</option>
             </select>
           </div>
           <div id="todo-list" class="plan-list"></div>
@@ -232,9 +233,25 @@
     </div>
   </div>
 
+  <!-- ===================== CATEGORY DELETE MODAL ===================== -->
+  <div id="catdel" class="modal center hidden">
+    <div class="modal-card confirm-card">
+      <h3 id="catdel-msg">Delete category?</h3>
+      <div id="catdel-reassign" class="hidden">
+        <label class="pk-label" for="catdel-target">Move its tasks to</label>
+        <select id="catdel-target"></select>
+        <p class="muted small">Tasks are never deleted with a category.</p>
+      </div>
+      <div class="confirm-actions">
+        <button id="catdel-cancel" class="btn ghost">Cancel</button>
+        <button id="catdel-ok" class="btn danger">Delete</button>
+      </div>
+    </div>
+  </div>
+
   <div id="toast" class="toast hidden"></div>
 
-  <script type="module" src="config.js?v=4"></script>
-  <script type="module" src="app.js?v=4"></script>
+  <script type="module" src="config.js?v=5"></script>
+  <script type="module" src="app.js?v=5"></script>
 </body>
 </html>

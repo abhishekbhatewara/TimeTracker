@@ -171,6 +171,9 @@ textarea{resize:vertical}
 .confirm-card h3{margin:4px 0 4px;font-size:1.05rem}
 .confirm-actions{display:flex;gap:10px;margin-top:16px}
 .confirm-actions .btn{flex:1}
+#catdel-reassign{margin:10px 0 4px;text-align:left}
+#catdel-reassign .pk-label{margin:0 0 4px}
+#catdel-reassign p{margin:6px 0 0}
 .picker-areas{display:flex;flex-wrap:wrap;gap:8px}
 .pk-label{font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;
   font-weight:700;margin:4px 0 -4px}

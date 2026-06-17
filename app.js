@@ -401,6 +401,10 @@ function renderTodos() {
     list = [...list].sort((a, b) =>
       (a.due_date || "9999-12-31").localeCompare(b.due_date || "9999-12-31") ||
       a.title.localeCompare(b.title));
+  } else if (state.todoSort === "category") {
+    list = [...list].sort((a, b) =>
+      ((areaById(a.area_id)?.sort_order ?? 999) - (areaById(b.area_id)?.sort_order ?? 999)) ||
+      a.title.localeCompare(b.title));
   }
   for (const t of list) {
     const a = areaById(t.area_id);
@@ -677,8 +681,51 @@ function addAreaRow(a = null) {
     <input class="nm" placeholder="Category name" value="${escapeAttr(a?.name || "")}" />
     <input class="pct" type="number" min="0" max="100" placeholder="—" value="${a && a.target_pct != null ? a.target_pct : ""}" title="Weekly target % (leave blank if not important)" />
     <button class="rm">✕</button>`;
-  row.querySelector(".rm").onclick = () => row.remove();
+  row.querySelector(".rm").onclick = () => {
+    if (a && a.id) deleteCategory(a.id);   // existing category → confirm + reassign flow
+    else row.remove();                      // unsaved new row → just drop it
+  };
   $("#areas-editor").appendChild(row);
+}
+
+// Delete a saved category: ask, let the user move its tasks, then archive. Undoable.
+let _catdelResolve = null;
+function settleCatdel(v) {
+  $("#catdel").classList.add("hidden");
+  if (_catdelResolve) { _catdelResolve(v); _catdelResolve = null; }
+}
+async function deleteCategory(id) {
+  const a = areaById(id);
+  if (!a) return;
+  const tasks = state.todos.filter((t) => t.area_id === id);
+  $("#catdel-msg").textContent = tasks.length
+    ? `Delete “${a.name}”? It has ${tasks.length} task${tasks.length > 1 ? "s" : ""}.`
+    : `Delete category “${a.name}”?`;
+  const reassign = $("#catdel-reassign"), sel = $("#catdel-target");
+  if (tasks.length) {
+    reassign.classList.remove("hidden");
+    sel.innerHTML = `<option value="">— Leave uncategorised —</option>` +
+      state.areas.filter((x) => x.id !== id)
+        .map((x) => `<option value="${x.id}">${escapeHtml(x.name)}</option>`).join("");
+  } else reassign.classList.add("hidden");
+
+  const ok = await new Promise((res) => { _catdelResolve = res; $("#catdel").classList.remove("hidden"); });
+  if (!ok) return;
+
+  const target = tasks.length ? (sel.value || null) : null;
+  const movedTodoIds = tasks.map((t) => t.id);
+  await sb.from("todos").update({ area_id: target }).eq("area_id", id).eq("archived", false);
+  await sb.from("plan_items").update({ area_id: target }).eq("area_id", id);
+  await sb.from("areas").update({ archived: true }).eq("id", id);
+  for (const t of state.todos) if (t.area_id === id) t.area_id = target;
+  for (const p of state.plan) if (p.area_id === id) p.area_id = target;
+  state.areas = state.areas.filter((x) => x.id !== id);
+  renderSetup(); renderTodos(); renderPlan(); render();
+  toastUndo("Category deleted", async () => {
+    await sb.from("areas").update({ archived: false }).eq("id", id);
+    if (movedTodoIds.length) await sb.from("todos").update({ area_id: id }).in("id", movedTodoIds);
+    await loadAll(); render(); renderSetup(); renderTodos();
+  });
 }
 async function saveAreas() {
   const rows = $$("#areas-editor .area-edit");
@@ -761,6 +808,8 @@ function bind() {
   $("#save-areas").onclick = saveAreas;
   $("#confirm-ok").onclick = () => settleConfirm(true);
   $("#confirm-cancel").onclick = () => settleConfirm(false);
+  $("#catdel-ok").onclick = () => settleCatdel(true);
+  $("#catdel-cancel").onclick = () => settleCatdel(false);
   $$(".tab").forEach((t) => (t.onclick = () => showView(t.dataset.view)));
 }
 
