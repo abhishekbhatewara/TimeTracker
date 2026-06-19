@@ -142,13 +142,11 @@
           </div>
           <datalist id="person-options"></datalist>
           <div class="todo-filter">
-            <label class="pk-label" for="todo-filter-person">Person</label>
-            <select id="todo-filter-person"><option value="">Everyone</option></select>
-            <label class="pk-label" for="todo-sort">Sort</label>
-            <select id="todo-sort">
-              <option value="title">A–Z</option>
-              <option value="due">By deadline</option>
-              <option value="category">By category</option>
+            <select id="todo-filter-person" class="chip-select"><option value="">All people</option></select>
+            <select id="todo-sort" class="chip-select">
+              <option value="title">Sort · A–Z</option>
+              <option value="due">Sort · Deadline</option>
+              <option value="category">Sort · Category</option>
             </select>
             <label class="show-done"><input type="checkbox" id="todo-showdone" /> <span id="showdone-label">Show done</span></label>
           </div>
@@ -264,7 +262,7 @@
 
   <div id="toast" class="toast hidden"></div>
 
-  <script type="module" src="config.js?v=9"></script>
-  <script type="module" src="app.js?v=9"></script>
+  <script type="module" src="config.js?v=10"></script>
+  <script type="module" src="app.js?v=10"></script>
 </body>
 </html>

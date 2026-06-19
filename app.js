@@ -382,16 +382,21 @@ async function addPlanItem() {
   const min = Number($("#plan-min").value) || 0;
   if (!task) return toast("Enter or pick a task");
   if (!areaId) return toast("Pick a category");
-  const todo = await ensureTodo(task, areaId, min);   // create on the master list if new
+  let todo = todoByTitle(task);
+  if (!todo) {   // new task — ask before adding it to the master To-Do list
+    if (await askConfirm(`“${task}” isn't in your To-Do list. Add it there too?`, "Add to To-Do")) {
+      todo = await ensureTodo(task, areaId, min, [], null);
+    }
+  }
   const { data, error } = await sb.from("plan_items").insert({
     user_id: state.user.id, date: localDateStr(new Date()), area_id: areaId,
     task, planned_min: min, sort_order: state.plan.length + 1,
-    todo_id: todo?.id || null, persons: personsOf(todo),
+    todo_id: todo?.id || null, persons: todo ? personsOf(todo) : [],
   }).select().single();
   if (error) return toast(error.message);
   state.plan.push(data);
   $("#plan-task").value = ""; $("#plan-min").value = "";
-  renderPlan(); renderPVA();
+  renderPlan(); renderPVA(); renderTodos();
 }
 
 // ---------- people helpers ----------
@@ -412,7 +417,7 @@ function renderPersonControls() {
   $("#person-options").innerHTML = persons.map((p) => `<option value="${escapeAttr(p)}">`).join("");
   const sel = $("#todo-filter-person");
   if (sel) {
-    sel.innerHTML = `<option value="">Everyone</option>` +
+    sel.innerHTML = `<option value="">All people</option>` +
       persons.map((p) => `<option value="${escapeAttr(p)}"${p === state.personFilter ? " selected" : ""}>${escapeHtml(p)}</option>`).join("");
   }
 }
