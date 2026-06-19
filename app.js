@@ -521,15 +521,15 @@ async function addTodoToPlan(t) {
   renderPlan(); renderPVA(); renderTodos(); toast("Added to today's plan");
 }
 async function toggleDone(t) {
+  if (!t.done_at) {   // confirm only when marking done, to avoid accidental taps
+    if (!(await askConfirm(`Mark “${t.title}” as done?`, "Mark done"))) return;
+  }
   const newVal = t.done_at ? null : new Date().toISOString();
   const { error } = await sb.from("todos").update({ done_at: newVal }).eq("id", t.id);
   if (error) return toast(error.message);
   t.done_at = newVal;
   renderTodos();
-  if (newVal) toastUndo("Marked done", async () => {
-    await sb.from("todos").update({ done_at: null }).eq("id", t.id);
-    t.done_at = null; renderTodos();
-  });
+  toast(newVal ? "Marked done" : "Marked not done");
 }
 async function deleteTodo(id) {
   const t = state.todos.find((x) => x.id === id);
@@ -578,6 +578,7 @@ function openPicker(mode) {
     .filter((t) => !t.done_at).map((t) => `<option value="${escapeAttr(t.title)}">`).join("");
   if (mode === "quick") {
     const now = new Date(); const h = new Date(now - 30 * 60000);
+    $("#pk-date").value = localDateStr(now);
     $("#pk-start").value = hhmm(h); $("#pk-end").value = hhmm(now);
   }
   const box = $("#picker-areas"); box.innerHTML = "";
@@ -613,9 +614,9 @@ function confirmPicker() {
   if (state.pick.mode === "timer") {
     startTimer(state.pick.areaId, note, persons);
   } else {
-    const today = localDateStr(new Date());
-    const s = new Date(`${today}T${$("#pk-start").value || "00:00"}`);
-    const e = new Date(`${today}T${$("#pk-end").value || "00:00"}`);
+    const date = $("#pk-date").value || localDateStr(new Date());
+    const s = new Date(`${date}T${$("#pk-start").value || "00:00"}`);
+    const e = new Date(`${date}T${$("#pk-end").value || "00:00"}`);
     if (e <= s) return toast("End must be after start");
     quickAdd(state.pick.areaId, note, persons, s.toISOString(), e.toISOString());
   }
@@ -716,7 +717,36 @@ function periodSummaryHTML(rangeEntries, opts = {}) {
 function renderDayDetail(dateStr) {
   const d = new Date(dateStr + "T00:00"); const next = new Date(d); next.setDate(next.getDate() + 1);
   const head = `<div class="rep-dayhead">${d.toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" })}</div>`;
-  $("#day-detail").innerHTML = head + periodSummaryHTML(entriesInRange(d, next));
+  const entries = entriesInRange(d, next);
+  $("#day-detail").innerHTML = head + dayTimelineHTML(entries) + periodSummaryHTML(entries);
+}
+
+// Horizontal timeline of the day's logged blocks (morning → evening).
+function dayTimelineHTML(entries) {
+  const done = entries.filter((e) => e.ended_at).sort((a, b) => new Date(a.started_at) - new Date(b.started_at));
+  if (!done.length) return "";
+  const hourOf = (iso) => { const t = new Date(iso); return t.getHours() + t.getMinutes() / 60; };
+  let lo = 24, hi = 0;
+  for (const e of done) { lo = Math.min(lo, hourOf(e.started_at)); hi = Math.max(hi, hourOf(e.ended_at)); }
+  const start = Math.floor(Math.min(lo, 9));   // show at least 9am..6pm
+  const end = Math.ceil(Math.max(hi, 18));
+  const span = end - start || 1;
+  let blocks = "";
+  for (const e of done) {
+    const a = areaById(e.area_id);
+    const s = hourOf(e.started_at), en = hourOf(e.ended_at);
+    const left = (s - start) / span * 100, width = Math.max(0.8, (en - s) / span * 100);
+    const s1 = new Date(e.started_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    const e1 = new Date(e.ended_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    blocks += `<div class="tl-block" style="left:${left}%;width:${width}%;background:${a?.color || "#888"}" title="${escapeAttr((e.note || "(untitled)") + " · " + s1 + "–" + e1)}"></div>`;
+  }
+  let ticks = "";
+  const step = span > 10 ? 3 : 2;
+  for (let h = start; h <= end; h += step) {
+    const hr = ((h + 11) % 12) + 1, ap = h < 12 || h === 24 ? "a" : "p";
+    ticks += `<span class="tl-tick" style="left:${(h - start) / span * 100}%">${hr}${ap}</span>`;
+  }
+  return `<div class="rep-sub">Timeline</div><div class="tl"><div class="tl-track">${blocks}</div><div class="tl-axis">${ticks}</div></div>`;
 }
 
 function renderAnalysis() {

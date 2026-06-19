@@ -167,6 +167,15 @@ textarea{resize:vertical}
 .ana-item{margin-bottom:14px}
 .ana-v{display:flex;align-items:center;font-weight:600}
 .ana-v .dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:8px}
+/* day timeline */
+.tl{margin:6px 0 8px}
+.tl-track{position:relative;height:34px;background:var(--surface2);border-radius:8px;overflow:hidden}
+.tl-block{position:absolute;top:3px;height:28px;border-radius:4px;opacity:.92;min-width:2px}
+.tl-axis{position:relative;height:14px;margin-top:5px}
+.tl-tick{position:absolute;font-size:.64rem;color:var(--muted);transform:translateX(-50%);white-space:nowrap}
+/* picker date + time layout */
+#picker-times{display:flex;flex-direction:column;gap:10px;margin-top:2px}
+.pk-time-row{display:flex;gap:12px}
 
 /* ---------- setup ---------- */
 .area-edit{display:flex;align-items:center;gap:8px;margin-bottom:8px}

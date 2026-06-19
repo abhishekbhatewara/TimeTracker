@@ -179,9 +179,12 @@
       <datalist id="picker-todo-options"></datalist>
       <label class="pk-label">Coordinate with <span class="req">optional</span></label>
       <input id="picker-person" list="person-options" placeholder="People — comma separated (optional)" />
-      <div id="picker-times" class="picker-times hidden">
-        <label class="row-field">Start <input id="pk-start" type="time" /></label>
-        <label class="row-field">End <input id="pk-end" type="time" /></label>
+      <div id="picker-times" class="hidden">
+        <label class="row-field">Date <input id="pk-date" type="date" /></label>
+        <div class="pk-time-row">
+          <label class="row-field">Start <input id="pk-start" type="time" /></label>
+          <label class="row-field">End <input id="pk-end" type="time" /></label>
+        </div>
       </div>
       <button id="picker-confirm" class="btn primary block">Start</button>
     </div>
@@ -261,7 +264,7 @@
 
   <div id="toast" class="toast hidden"></div>
 
-  <script type="module" src="config.js?v=8"></script>
-  <script type="module" src="app.js?v=8"></script>
+  <script type="module" src="config.js?v=9"></script>
+  <script type="module" src="app.js?v=9"></script>
 </body>
 </html>
