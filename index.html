@@ -121,6 +121,11 @@
           <button id="add-area" class="btn ghost block">＋ Add category</button>
           <button id="save-areas" class="btn primary block">Save</button>
         </div>
+        <div class="card">
+          <h3>People</h3>
+          <p class="muted small">Rename a person (rename to an existing name to merge them) or remove them — applied across all their tasks at once. To add someone new, tag them on a task.</p>
+          <div id="people-list" class="people-list"></div>
+        </div>
       </section>
 
       <!-- ---------- TO-DOS ---------- -->
@@ -260,9 +265,21 @@
     </div>
   </div>
 
+  <!-- ===================== PROMPT MODAL ===================== -->
+  <div id="prompt" class="modal center hidden">
+    <div class="modal-card confirm-card">
+      <h3 id="prompt-msg">Rename</h3>
+      <input id="prompt-input" />
+      <div class="confirm-actions">
+        <button id="prompt-cancel" class="btn ghost">Cancel</button>
+        <button id="prompt-ok" class="btn primary">Save</button>
+      </div>
+    </div>
+  </div>
+
   <div id="toast" class="toast hidden"></div>
 
-  <script type="module" src="config.js?v=10"></script>
-  <script type="module" src="app.js?v=10"></script>
+  <script type="module" src="config.js?v=11"></script>
+  <script type="module" src="app.js?v=11"></script>
 </body>
 </html>

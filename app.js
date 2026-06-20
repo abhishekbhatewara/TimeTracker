@@ -851,6 +851,81 @@ function renderHeatmap() {
 function renderSetup() {
   const box = $("#areas-editor"); box.innerHTML = "";
   for (const a of state.areas) addAreaRow(a);
+  renderPeople();
+}
+
+// ---------- People manager ----------
+let _promptResolve = null;
+function askPrompt(msg, val = "", okLabel = "Save") {
+  $("#prompt-msg").textContent = msg;
+  $("#prompt-input").value = val;
+  $("#prompt-ok").textContent = okLabel;
+  $("#prompt").classList.remove("hidden");
+  setTimeout(() => $("#prompt-input").focus(), 40);
+  return new Promise((r) => { _promptResolve = r; });
+}
+function settlePrompt(v) {
+  $("#prompt").classList.add("hidden");
+  if (_promptResolve) { _promptResolve(v); _promptResolve = null; }
+}
+function renderPeople() {
+  const box = $("#people-list"); box.innerHTML = "";
+  const counts = new Map();
+  for (const t of state.todos) for (const p of personsOf(t)) counts.set(p, (counts.get(p) || 0) + 1);
+  const names = [...counts.keys()].sort((a, b) => a.localeCompare(b));
+  if (!names.length) { box.innerHTML = `<div class="empty">No people tagged yet. Tag someone on a task to see them here.</div>`; return; }
+  for (const name of names) {
+    const n = counts.get(name);
+    const row = document.createElement("div");
+    row.className = "people-row";
+    row.innerHTML = `<span class="pname">${escapeHtml(name)}</span>
+      <span class="muted small">${n} task${n > 1 ? "s" : ""}</span>
+      <button class="iconaction pren" title="Rename / merge">✎</button>
+      <button class="iconaction pdel" title="Remove from all tasks">✕</button>`;
+    row.querySelector(".pren").onclick = () => renamePerson(name);
+    row.querySelector(".pdel").onclick = () => deletePerson(name);
+    box.appendChild(row);
+  }
+}
+// Replace (or with newName=null, drop) a person across every task/plan/entry.
+async function applyPersonChange(oldName, newName) {
+  const fix = (arr) => {
+    const out = [];
+    for (const p of arr) {
+      const v = p === oldName ? newName : p;
+      if (v && !out.includes(v)) out.push(v);
+    }
+    return out;
+  };
+  const sweep = async (table, rows) => {
+    for (const r of rows) {
+      if (personsOf(r).includes(oldName)) {
+        const np = fix(r.persons);
+        const { error } = await sb.from(table).update({ persons: np }).eq("id", r.id);
+        if (!error) r.persons = np;
+      }
+    }
+  };
+  await sweep("todos", state.todos);
+  await sweep("plan_items", state.plan);
+  await sweep("entries", state.entries);
+  if (state.personFilter === oldName) state.personFilter = newName || "";
+  renderPeople(); renderTodos(); renderPlan();
+}
+async function renamePerson(oldName) {
+  const neu = await askPrompt(`Rename “${oldName}” to…`, oldName);
+  if (neu == null) return;
+  const trimmed = neu.trim();
+  if (!trimmed || trimmed === oldName) return;
+  const merging = distinctPersons().some((p) => p.toLowerCase() === trimmed.toLowerCase());
+  if (merging && !(await askConfirm(`“${trimmed}” already exists. Merge “${oldName}” into it?`, "Merge"))) return;
+  await applyPersonChange(oldName, trimmed);
+  toast(merging ? "Merged" : `Renamed to ${trimmed}`);
+}
+async function deletePerson(name) {
+  if (!(await askConfirm(`Remove “${name}” from all their tasks?`, "Remove"))) return;
+  await applyPersonChange(name, null);
+  toast("Removed");
 }
 function addAreaRow(a = null) {
   const row = document.createElement("div");
@@ -992,6 +1067,9 @@ function bind() {
   $("#confirm-cancel").onclick = () => settleConfirm(false);
   $("#catdel-ok").onclick = () => settleCatdel(true);
   $("#catdel-cancel").onclick = () => settleCatdel(false);
+  $("#prompt-ok").onclick = () => settlePrompt($("#prompt-input").value);
+  $("#prompt-cancel").onclick = () => settlePrompt(null);
+  $("#prompt-input").addEventListener("keydown", (e) => { if (e.key === "Enter") settlePrompt($("#prompt-input").value); });
   $$(".tab").forEach((t) => (t.onclick = () => showView(t.dataset.view)));
 }
 
