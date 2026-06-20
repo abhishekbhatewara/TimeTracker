@@ -275,6 +275,20 @@
     </div>
   </div>
 
+  <!-- ===================== DUE-SOON (start of day) MODAL ===================== -->
+  <div id="dueask" class="modal center hidden">
+    <div class="modal-card">
+      <div class="modal-head">
+        <h3>📅 Due soon</h3>
+        <button id="dueask-close" class="icon-btn">✕</button>
+      </div>
+      <p class="muted small">These are due today or tomorrow. Add them to today's plan?</p>
+      <div id="dueask-list" class="dueask-list"></div>
+      <button id="dueask-add" class="btn primary block">Add selected to today</button>
+      <button id="dueask-skip" class="btn ghost block">Not now</button>
+    </div>
+  </div>
+
   <!-- ===================== PROMPT MODAL ===================== -->
   <div id="prompt" class="modal center hidden">
     <div class="modal-card confirm-card">
@@ -289,7 +303,7 @@
 
   <div id="toast" class="toast hidden"></div>
 
-  <script type="module" src="config.js?v=12"></script>
-  <script type="module" src="app.js?v=12"></script>
+  <script type="module" src="config.js?v=13"></script>
+  <script type="module" src="app.js?v=13"></script>
 </body>
 </html>

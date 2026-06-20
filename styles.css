@@ -89,6 +89,14 @@ textarea{resize:vertical}
 .entry .iconaction{color:var(--muted);font-size:1.05rem;background:none;border:none;padding:4px 6px}
 .empty{color:var(--muted);text-align:center;padding:20px;font-size:.9rem}
 
+/* ---------- due-soon prompt ---------- */
+.dueask-list{display:flex;flex-direction:column;gap:8px;margin:4px 0 6px;max-height:50vh;overflow:auto}
+.dueask-item{display:flex;align-items:center;gap:10px;background:var(--surface2);
+  border:1px solid var(--line);border-radius:12px;padding:11px 12px;cursor:pointer}
+.dueask-item input{width:auto;margin:0;flex:none;accent-color:var(--primary)}
+.dueask-item .dot{width:9px;height:9px;border-radius:50%;flex:none}
+.dueask-item .da-title{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}
+
 /* ---------- carry forward ---------- */
 .carry-card{border-color:var(--primary);box-shadow:inset 0 0 0 1px rgba(99,102,241,.25)}
 .cf-allbtn{padding:7px 12px;font-size:.78rem;flex:none}

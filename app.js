@@ -253,6 +253,58 @@ async function carryMarkDone(c) {
   renderCarryForward(); renderTodos(); toast("Marked done");
 }
 
+// ---------- start-of-day "due soon" prompt (today + tomorrow) ----------
+function dueSoonCandidates() {
+  const today = localDateStr(new Date());
+  const t = new Date(); t.setDate(t.getDate() + 1);
+  const tomorrow = localDateStr(t);
+  const inToday = new Set(state.plan.map((p) => p.task.trim().toLowerCase()));
+  return state.todos
+    .filter((td) => td.due_date && !td.done_at &&
+      (td.due_date === today || td.due_date === tomorrow) &&
+      !inToday.has(td.title.trim().toLowerCase()))
+    .sort((a, b) => a.due_date.localeCompare(b.due_date) || a.title.localeCompare(b.title));
+}
+function showDueAsk() {
+  const today = localDateStr(new Date());
+  const key = "ta-dueask-" + state.user.id;
+  if (localStorage.getItem(key) === today) return;   // already prompted today
+  const cands = dueSoonCandidates();
+  if (!cands.length) return;
+  const box = $("#dueask-list"); box.innerHTML = "";
+  for (const td of cands) {
+    const a = areaById(td.area_id), due = dueLabel(td.due_date);
+    const row = document.createElement("label");
+    row.className = "dueask-item";
+    row.innerHTML = `<input type="checkbox" checked data-id="${td.id}" />
+      <span class="dot" style="background:${a?.color || "#555"}"></span>
+      <span class="da-title">${escapeHtml(td.title)}</span>
+      <span class="due-badge ${due.cls}">${due.text}</span>`;
+    box.appendChild(row);
+  }
+  $("#dueask").classList.remove("hidden");
+}
+function dismissDueAsk() {
+  localStorage.setItem("ta-dueask-" + state.user.id, localDateStr(new Date()));
+  $("#dueask").classList.add("hidden");
+}
+async function dueAskAdd() {
+  const ids = [...document.querySelectorAll("#dueask-list input:checked")].map((i) => i.dataset.id);
+  for (const id of ids) {
+    const td = state.todos.find((x) => x.id === id);
+    if (!td || inTodayPlan(td.title)) continue;
+    const { data, error } = await sb.from("plan_items").insert({
+      user_id: state.user.id, date: localDateStr(new Date()), area_id: td.area_id,
+      task: td.title, planned_min: td.default_min || 0, sort_order: state.plan.length + 1,
+      todo_id: td.id, persons: personsOf(td),
+    }).select().single();
+    if (!error && data) { state.plan.push(data); state.planHistory.push(data); }
+  }
+  dismissDueAsk();
+  render();
+  toast(ids.length ? "Added to today" : "Nothing selected");
+}
+
 function renderTimer() {
   const idle = $("#timer-idle"), run = $("#timer-running");
   clearInterval(state.tick);
@@ -1105,6 +1157,7 @@ async function enterApp() {
   $("#auth").classList.add("hidden");
   $("#app").classList.remove("hidden");
   render();
+  showDueAsk();   // start-of-day prompt for tasks due today/tomorrow
 }
 function showAuth(msg = "") {
   $("#app").classList.add("hidden");
@@ -1155,6 +1208,9 @@ function bind() {
   $("#confirm-cancel").onclick = () => settleConfirm(false);
   $("#catdel-ok").onclick = () => settleCatdel(true);
   $("#catdel-cancel").onclick = () => settleCatdel(false);
+  $("#dueask-add").onclick = dueAskAdd;
+  $("#dueask-skip").onclick = dismissDueAsk;
+  $("#dueask-close").onclick = dismissDueAsk;
   $("#prompt-ok").onclick = () => settlePrompt($("#prompt-input").value);
   $("#prompt-cancel").onclick = () => settlePrompt(null);
   $("#prompt-input").addEventListener("keydown", (e) => { if (e.key === "Enter") settlePrompt($("#prompt-input").value); });
