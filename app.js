@@ -362,14 +362,20 @@ function renderPlan() {
   for (const pi of state.plan) {
     totalMin += pi.planned_min;
     const a = areaById(pi.area_id);
+    const todo = pi.todo_id ? state.todos.find((t) => t.id === pi.todo_id) : todoByTitle(pi.task);
+    const isDone = !!todo?.done_at;
     const row = document.createElement("div");
-    row.className = "plan-item";
-    row.innerHTML = `<span class="dot" style="background:${a?.color || "#555"}"></span>
-      <div class="body"><div class="title">${escapeHtml(pi.task)}</div>
+    row.className = "plan-item" + (isDone ? " is-done" : "");
+    const lead = todo
+      ? `<button class="done-toggle${isDone ? " done" : ""}" title="${isDone ? "Mark not done" : "Mark done"}">${isDone ? "✓" : ""}</button><span class="dot" style="background:${a?.color || "#555"}"></span>`
+      : `<span class="dot" style="background:${a?.color || "#555"}"></span>`;
+    row.innerHTML = `${lead}
+      <div class="body"><div class="title${isDone ? " struck" : ""}">${escapeHtml(pi.task)}</div>
       <div class="sub">${a?.name || "—"} · ${pi.planned_min}m planned${personsOf(pi).length ? ` · <span class="person">👤 ${escapeHtml(personsOf(pi).join(", "))}</span>` : ""}</div></div>
-      <button class="iconaction play" title="Start timer">▶</button>
+      ${isDone ? "" : `<button class="iconaction play" title="Start timer">▶</button>`}
       <button class="iconaction del" title="Remove">✕</button>`;
-    row.querySelector(".play").onclick = () => startTimer(pi.area_id, pi.task, personsOf(pi));
+    if (todo) row.querySelector(".done-toggle").onclick = () => toggleDone(todo);
+    if (!isDone) row.querySelector(".play").onclick = () => startTimer(pi.area_id, pi.task, personsOf(pi));
     row.querySelector(".del").onclick = () => deletePlan(pi.id);
     box.appendChild(row);
   }
@@ -672,7 +678,7 @@ async function toggleDone(t) {
   const { error } = await sb.from("todos").update({ done_at: newVal }).eq("id", t.id);
   if (error) return toast(error.message);
   t.done_at = newVal;
-  renderTodos();
+  renderTodos(); renderPlan(); renderCarryForward();
   toast(newVal ? "Marked done" : "Marked not done");
 }
 async function deleteTodo(id) {
