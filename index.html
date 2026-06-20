@@ -37,6 +37,16 @@
     <main id="main">
       <!-- ---------- TODAY ---------- -->
       <section id="view-today" class="view">
+        <!-- Carry forward -->
+        <div class="card carry-card hidden" id="carry-card">
+          <div class="section-row">
+            <h3>↪ Carry forward <span class="muted">(<span id="carry-count">0</span>)</span></h3>
+            <button id="carry-all" class="btn ghost cf-allbtn">Add all to today</button>
+          </div>
+          <p class="muted small">Planned earlier but not finished — bring forward or mark done.</p>
+          <div id="carry-list" class="plan-list"></div>
+        </div>
+
         <!-- Plan your day -->
         <div class="card">
           <div class="section-row"><h3>Plan your day</h3><span class="muted small" id="plan-total"></span></div>
@@ -279,7 +289,7 @@
 
   <div id="toast" class="toast hidden"></div>
 
-  <script type="module" src="config.js?v=11"></script>
-  <script type="module" src="app.js?v=11"></script>
+  <script type="module" src="config.js?v=12"></script>
+  <script type="module" src="app.js?v=12"></script>
 </body>
 </html>

@@ -143,27 +143,114 @@ function weekEntries(refDate = new Date()) {
 async function loadAll() {
   const uid = state.user.id;
   const since = new Date(); since.setDate(since.getDate() - 84);
+  const planSince = new Date(); planSince.setDate(planSince.getDate() - 30);
+  const today = localDateStr(new Date());
   const [areas, settings, entries, plan, todos] = await Promise.all([
     sb.from("areas").select("*").eq("archived", false).order("sort_order"),
     sb.from("settings").select("*").eq("user_id", uid).maybeSingle(),
     sb.from("entries").select("*").or(`started_at.gte.${since.toISOString()},ended_at.is.null`).order("started_at", { ascending: false }),
-    sb.from("plan_items").select("*").eq("date", localDateStr(new Date())).order("sort_order"),
+    sb.from("plan_items").select("*").gte("date", localDateStr(planSince)).order("date").order("sort_order"),
     sb.from("todos").select("*").eq("archived", false).order("title"),
   ]);
   state.areas = areas.data || [];
   state.settings = settings.data || { week_start: 1 };
   state.entries = entries.data || [];
-  state.plan = plan.data || [];
+  state.planHistory = plan.data || [];                       // last ~30 days of plans
+  state.plan = state.planHistory.filter((p) => p.date === today);  // today's plan
   state.todos = todos.data || [];
   state.running = state.entries.find((e) => !e.ended_at) || null;
 }
 
+// Tasks planned on an earlier day whose to-do still isn't done and that aren't
+// already in today's plan — surfaced so they aren't forgotten.
+function carryForwardCandidates() {
+  const today = localDateStr(new Date());
+  const inToday = new Set(state.plan.map((p) => p.task.trim().toLowerCase()));
+  const seen = new Set();
+  const out = [];
+  const past = (state.planHistory || []).filter((p) => p.date < today)
+    .sort((a, b) => b.date.localeCompare(a.date));   // most recent first
+  for (const p of past) {
+    const key = p.task.trim().toLowerCase();
+    if (seen.has(key) || inToday.has(key)) continue;
+    const todo = p.todo_id ? state.todos.find((t) => t.id === p.todo_id) : todoByTitle(p.task);
+    if (!todo || todo.done_at) continue;   // no live to-do, or already done → not pending
+    seen.add(key);
+    out.push({ ...p, todo });
+  }
+  return out;
+}
+
 // ===================================================== render: TODAY
 function render() {
+  renderCarryForward();
   renderPlan();
   renderTimer();
   renderTodayList();
   renderPVA();
+}
+
+function relDay(dateStr) {
+  const d = new Date(dateStr + "T00:00"); const t = new Date(); t.setHours(0, 0, 0, 0);
+  const days = Math.round((t - d) / 86400000);
+  if (days === 1) return "yesterday";
+  if (days < 7) return days + " days ago";
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+function renderCarryForward() {
+  const card = $("#carry-card"), box = $("#carry-list");
+  const cands = carryForwardCandidates();
+  if (!cands.length) { card.classList.add("hidden"); return; }
+  card.classList.remove("hidden");
+  $("#carry-count").textContent = cands.length;
+  box.innerHTML = "";
+  for (const c of cands) {
+    const a = areaById(c.area_id);
+    const row = document.createElement("div");
+    row.className = "plan-item";
+    row.innerHTML = `<span class="dot" style="background:${a?.color || "#555"}"></span>
+      <div class="body"><div class="title">${escapeHtml(c.task)}</div>
+      <div class="sub">${a ? escapeHtml(a.name) : "No category"} · from ${relDay(c.date)}</div></div>
+      <button class="iconaction cf-add" title="Add to today's plan">＋</button>
+      <button class="iconaction cf-done" title="Mark done">✓</button>`;
+    row.querySelector(".cf-add").onclick = () => carryToToday(c);
+    row.querySelector(".cf-done").onclick = () => carryMarkDone(c);
+    box.appendChild(row);
+  }
+}
+async function carryToToday(c) {
+  if (inTodayPlan(c.task)) { renderCarryForward(); return; }
+  const { data, error } = await sb.from("plan_items").insert({
+    user_id: state.user.id, date: localDateStr(new Date()), area_id: c.area_id,
+    task: c.task, planned_min: c.planned_min, sort_order: state.plan.length + 1,
+    todo_id: c.todo_id || null, persons: c.persons || [],
+  }).select().single();
+  if (error) return toast(error.message);
+  state.plan.push(data); state.planHistory.push(data);
+  renderPlan(); renderPVA(); renderCarryForward(); toast("Added to today");
+}
+async function carryAllToToday() {
+  const cands = carryForwardCandidates();
+  for (const c of cands) {
+    if (inTodayPlan(c.task)) continue;
+    const { data, error } = await sb.from("plan_items").insert({
+      user_id: state.user.id, date: localDateStr(new Date()), area_id: c.area_id,
+      task: c.task, planned_min: c.planned_min, sort_order: state.plan.length + 1,
+      todo_id: c.todo_id || null, persons: c.persons || [],
+    }).select().single();
+    if (!error && data) { state.plan.push(data); state.planHistory.push(data); }
+  }
+  renderPlan(); renderPVA(); renderCarryForward(); toast("Added to today");
+}
+async function carryMarkDone(c) {
+  const todo = c.todo;
+  if (!todo) return;
+  if (!(await askConfirm(`Mark “${todo.title}” as done?`, "Mark done"))) return;
+  const ts = new Date().toISOString();
+  const { error } = await sb.from("todos").update({ done_at: ts }).eq("id", todo.id);
+  if (error) return toast(error.message);
+  todo.done_at = ts;
+  renderCarryForward(); renderTodos(); toast("Marked done");
 }
 
 function renderTimer() {
@@ -1046,6 +1133,7 @@ function bind() {
   $("#picker-confirm").onclick = confirmPicker;
   $("#picker-note").addEventListener("input", onPickerNoteInput);
   $("#plan-add").onclick = addPlanItem;
+  $("#carry-all").onclick = carryAllToToday;
   $("#plan-area").addEventListener("change", fillPlanTodoOptions);
   $("#plan-task").addEventListener("input", onPlanTaskInput);
   $("#plan-task").addEventListener("keydown", (e) => { if (e.key === "Enter") addPlanItem(); });
