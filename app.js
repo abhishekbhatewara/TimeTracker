@@ -174,7 +174,7 @@ function carryForwardCandidates() {
     const key = p.task.trim().toLowerCase();
     if (seen.has(key) || inToday.has(key)) continue;
     const todo = p.todo_id ? state.todos.find((t) => t.id === p.todo_id) : todoByTitle(p.task);
-    if (!todo || todo.done_at) continue;   // no live to-do, or already done → not pending
+    if (!todo || todo.done_at || todo.carry_silenced) continue;   // no live to-do, done, or silenced
     seen.add(key);
     out.push({ ...p, todo });
   }
@@ -212,9 +212,11 @@ function renderCarryForward() {
       <div class="body"><div class="title">${escapeHtml(c.task)}</div>
       <div class="sub">${a ? escapeHtml(a.name) : "No category"} · from ${relDay(c.date)}</div></div>
       <button class="iconaction cf-add" title="Add to today's plan">＋</button>
-      <button class="iconaction cf-done" title="Mark done">✓</button>`;
+      <button class="iconaction cf-done" title="Mark done">✓</button>
+      <button class="iconaction cf-silence" title="Silence — stop carrying forward">🔕</button>`;
     row.querySelector(".cf-add").onclick = () => carryToToday(c);
     row.querySelector(".cf-done").onclick = () => carryMarkDone(c);
+    row.querySelector(".cf-silence").onclick = () => carrySilence(c);
     box.appendChild(row);
   }
 }
@@ -241,6 +243,18 @@ async function carryAllToToday() {
     if (!error && data) { state.plan.push(data); state.planHistory.push(data); }
   }
   renderPlan(); renderPVA(); renderCarryForward(); toast("Added to today");
+}
+async function carrySilence(c) {
+  const todo = c.todo;
+  if (!todo) return;
+  const { error } = await sb.from("todos").update({ carry_silenced: true }).eq("id", todo.id);
+  if (error) return toast(error.message);
+  todo.carry_silenced = true;
+  renderCarryForward();
+  toastUndo("Silenced — won't carry forward", async () => {
+    await sb.from("todos").update({ carry_silenced: false }).eq("id", todo.id);
+    todo.carry_silenced = false; renderCarryForward();
+  });
 }
 async function carryMarkDone(c) {
   const todo = c.todo;
@@ -631,6 +645,7 @@ function openTodoEditor(t) {
   $("#te-person").value = personsOf(t).join(", ");
   $("#te-due").value = t.due_date || "";
   $("#te-min").value = t.default_min || "";
+  $("#te-carry").checked = !t.carry_silenced;
   $("#todoedit").classList.remove("hidden");
 }
 function closeTodoEditor() { $("#todoedit").classList.add("hidden"); state.todoEditId = null; }
@@ -644,13 +659,13 @@ async function saveTodoEditor() {
   const payload = {
     title, area_id: $("#te-area").value || null,
     persons: parsePersons($("#te-person").value), default_min: Number($("#te-min").value) || 0,
-    due_date: $("#te-due").value || null,
+    due_date: $("#te-due").value || null, carry_silenced: !$("#te-carry").checked,
   };
   const { data, error } = await sb.from("todos").update(payload).eq("id", t.id).select().single();
   if (error) return toast(error.message);
   Object.assign(t, data);
   state.todos.sort((a, b) => a.title.localeCompare(b.title));
-  closeTodoEditor(); renderTodos(); renderPlan(); toast("Saved");
+  closeTodoEditor(); renderTodos(); renderPlan(); renderCarryForward(); toast("Saved");
 }
 async function deleteFromTodoEditor() {
   const id = state.todoEditId;

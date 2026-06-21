@@ -102,6 +102,9 @@ textarea{resize:vertical}
 .cf-allbtn{padding:7px 12px;font-size:.78rem;flex:none}
 .plan-item .cf-add{color:var(--primary2);font-size:1.2rem;font-weight:700}
 .plan-item .cf-done{color:var(--good);font-size:1rem;font-weight:700}
+.plan-item .cf-silence{font-size:.95rem;opacity:.75}
+.te-check{display:flex;align-items:center;gap:8px;font-size:.9rem;color:var(--txt);margin:10px 0 2px;cursor:pointer}
+.te-check input{width:auto;margin:0;accent-color:var(--primary)}
 
 /* ---------- plan ---------- */
 .plan-form{display:flex;flex-direction:column;gap:8px;margin-top:6px}
