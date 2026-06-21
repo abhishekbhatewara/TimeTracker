@@ -21,6 +21,7 @@ const state = {
   todoEditId: null,
   personFilter: "",
   todoSort: "title",
+  todoSearch: "",
   showDone: false,
   tick: null,
 };
@@ -611,6 +612,11 @@ function renderTodos() {
   $("#showdone-label").textContent = `Show done${doneCount ? ` (${doneCount})` : ""}`;
   let list = state.todos.filter((t) => !state.personFilter || personsOf(t).includes(state.personFilter));
   if (!state.showDone) list = list.filter((t) => !t.done_at);
+  const q = state.todoSearch.trim().toLowerCase();
+  if (q) list = list.filter((t) =>
+    t.title.toLowerCase().includes(q) ||
+    (areaById(t.area_id)?.name || "").toLowerCase().includes(q) ||
+    personsOf(t).some((p) => p.toLowerCase().includes(q)));
   if (state.todoSort === "due") {
     // soonest deadline first; tasks without a deadline go last
     list = [...list].sort((a, b) =>
@@ -647,7 +653,7 @@ function renderTodos() {
     row.querySelector(".del").onclick = () => deleteTodo(t.id);
     box.appendChild(row);
   }
-  if (!list.length) box.innerHTML = `<div class="empty">${state.personFilter ? "No tasks for this person." : "No tasks yet. Add them above or paste your list."}</div>`;
+  if (!list.length) box.innerHTML = `<div class="empty">${q ? `No tasks match “${escapeHtml(state.todoSearch.trim())}”.` : state.personFilter ? "No tasks for this person." : "No tasks yet. Add them above or paste your list."}</div>`;
 }
 async function addTodo() {
   const title = $("#todo-new").value.trim();
@@ -1239,6 +1245,7 @@ function bind() {
   $("#todo-new").addEventListener("keydown", (e) => { if (e.key === "Enter") addTodo(); });
   $("#todo-person").addEventListener("keydown", (e) => { if (e.key === "Enter") addTodo(); });
   $("#todo-filter-person").addEventListener("change", (e) => { state.personFilter = e.target.value; renderTodos(); });
+  $("#todo-search").addEventListener("input", (e) => { state.todoSearch = e.target.value; renderTodos(); });
   $("#todo-sort").addEventListener("change", (e) => { state.todoSort = e.target.value; renderTodos(); });
   $("#todo-showdone").addEventListener("change", (e) => { state.showDone = e.target.checked; renderTodos(); });
   $("#todoedit-close").onclick = closeTodoEditor;
