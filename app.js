@@ -38,7 +38,9 @@ const fmtClock = (sec) => {
 };
 const minutesOf = (e) => {
   const end = e.ended_at ? new Date(e.ended_at) : new Date();
-  return (end - new Date(e.started_at)) / 60000;
+  let ms = end - new Date(e.started_at) - (e.paused_ms || 0);
+  if (e.paused_at && !e.ended_at) ms -= (Date.now() - new Date(e.paused_at)); // freeze while paused
+  return Math.max(0, ms) / 60000;
 };
 const localDateStr = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 const sameDay = (a, b) => localDateStr(a) === localDateStr(b);
@@ -325,15 +327,31 @@ function renderTimer() {
   if (state.running) {
     idle.classList.add("hidden"); run.classList.remove("hidden");
     const a = areaById(state.running.area_id);
-    $("#running-label").textContent = [a?.name, state.running.note].filter(Boolean).join(" · ") || "Tracking";
-    const upd = () => {
-      const sec = Math.floor((Date.now() - new Date(state.running.started_at)) / 1000);
-      $("#running-elapsed").textContent = fmtClock(sec);
-    };
-    upd(); state.tick = setInterval(upd, 1000);
+    const paused = !!state.running.paused_at;
+    run.classList.toggle("paused", paused);
+    $("#running-label").textContent = (paused ? "⏸ " : "") +
+      ([a?.name, state.running.note].filter(Boolean).join(" · ") || "Tracking");
+    $("#pause-timer").textContent = paused ? "▶ Resume" : "⏸ Pause";
+    const upd = () => { $("#running-elapsed").textContent = fmtClock(Math.floor(minutesOf(state.running) * 60)); };
+    upd();
+    if (!paused) state.tick = setInterval(upd, 1000);   // frozen while paused
   } else {
     idle.classList.remove("hidden"); run.classList.add("hidden");
   }
+}
+async function pauseTimer() {
+  if (!state.running || state.running.paused_at) return;
+  const ts = new Date().toISOString();
+  const { error } = await sb.from("entries").update({ paused_at: ts }).eq("id", state.running.id);
+  if (error) return toast(error.message);
+  state.running.paused_at = ts; renderTimer(); toast("Paused");
+}
+async function resumeTimer() {
+  if (!state.running || !state.running.paused_at) return;
+  const newMs = (state.running.paused_ms || 0) + (Date.now() - new Date(state.running.paused_at));
+  const { error } = await sb.from("entries").update({ paused_ms: newMs, paused_at: null }).eq("id", state.running.id);
+  if (error) return toast(error.message);
+  state.running.paused_ms = newMs; state.running.paused_at = null; renderTimer(); toast("Resumed");
 }
 
 function renderTodayList() {
@@ -451,9 +469,14 @@ async function stopTimer() {
   if (!state.running) return;
   const end = new Date().toISOString();
   const note = state.running.note;
-  const { error } = await sb.from("entries").update({ ended_at: end }).eq("id", state.running.id);
+  const patch = { ended_at: end };
+  if (state.running.paused_at) {   // finalize any in-progress pause
+    patch.paused_ms = (state.running.paused_ms || 0) + (Date.now() - new Date(state.running.paused_at));
+    patch.paused_at = null;
+  }
+  const { error } = await sb.from("entries").update(patch).eq("id", state.running.id);
   if (error) return toast(error.message);
-  state.running.ended_at = end; state.running = null;
+  Object.assign(state.running, patch); state.running = null;
   render(); toast("Saved");
   await maybeAskDone(note);
 }
@@ -1202,6 +1225,7 @@ function bind() {
   $("#signout").onclick = () => sb.auth.signOut();
   $("#start-timer").onclick = () => openPicker("timer");
   $("#quick-add").onclick = () => openPicker("quick");
+  $("#pause-timer").onclick = () => (state.running?.paused_at ? resumeTimer() : pauseTimer());
   $("#stop-timer").onclick = stopTimer;
   $("#picker-close").onclick = closePicker;
   $("#picker-confirm").onclick = confirmPicker;
