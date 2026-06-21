@@ -569,6 +569,7 @@ async function addPlanItem() {
   if (!todo) {   // new task — ask before adding it to the master To-Do list
     if (await askConfirm(`“${task}” isn't in your To-Do list. Add it there too?`, "Add to To-Do")) {
       todo = await ensureTodo(task, areaId, min, [], null);
+      if (todo) toast(`“${todo.title}” added to your to-do list`);
     }
   }
   const { data, error } = await sb.from("plan_items").insert({
@@ -665,6 +666,7 @@ async function addTodo() {
   if (!t) return;
   $("#todo-new").value = ""; $("#todo-min").value = ""; $("#todo-person").value = ""; $("#todo-due").value = "";
   renderTodos(); renderPlan();
+  toast(`“${t.title}” added to your to-do list`);
 }
 // ---------- to-do editor ----------
 function openTodoEditor(t) {
