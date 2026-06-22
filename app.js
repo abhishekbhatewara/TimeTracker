@@ -802,7 +802,20 @@ function onPickerNoteInput() {
   if (personsOf(t).length && !$("#picker-person").value.trim()) $("#picker-person").value = personsOf(t).join(", ");
 }
 function closePicker() { $("#picker").classList.add("hidden"); }
-function confirmPicker() {
+// Find an existing entry whose time interval overlaps [startISO, endISO).
+function overlappingEntry(startISO, endISO, excludeId) {
+  const s = +new Date(startISO), e = +new Date(endISO);
+  return state.entries.find((en) => {
+    if (en.id === excludeId) return false;
+    const es = +new Date(en.started_at), ee = en.ended_at ? +new Date(en.ended_at) : Date.now();
+    return s < ee && es < e;
+  });
+}
+function fmtRange(en) {
+  const f = (d) => d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  return `${f(new Date(en.started_at))}–${en.ended_at ? f(new Date(en.ended_at)) : "now"}`;
+}
+async function confirmPicker() {
   if (!state.pick.areaId) return toast("Pick a category");
   const note = $("#picker-note").value.trim();
   if (!note) return toast("Task is required");
@@ -814,6 +827,11 @@ function confirmPicker() {
     const s = new Date(`${date}T${$("#pk-start").value || "00:00"}`);
     const e = new Date(`${date}T${$("#pk-end").value || "00:00"}`);
     if (e <= s) return toast("End must be after start");
+    const ov = overlappingEntry(s.toISOString(), e.toISOString(), null);
+    if (ov) {
+      const a = areaById(ov.area_id);
+      if (!(await askConfirm(`Overlaps “${ov.note || a?.name || "another task"}” (${fmtRange(ov)}). Add anyway?`, "Add anyway"))) return;
+    }
     quickAdd(state.pick.areaId, note, persons, s.toISOString(), e.toISOString());
   }
   closePicker();
@@ -843,6 +861,13 @@ async function saveEditor() {
     const end = new Date(`${date}T${$("#ed-end").value}`);
     if (end <= new Date(startISO)) return toast("End must be after start");
     endISO = end.toISOString();
+  }
+  if (endISO) {
+    const ov = overlappingEntry(startISO, endISO, e.id);
+    if (ov) {
+      const a = areaById(ov.area_id);
+      if (!(await askConfirm(`Overlaps “${ov.note || a?.name || "another task"}” (${fmtRange(ov)}). Save anyway?`, "Save anyway"))) return;
+    }
   }
   const payload = { note: task, area_id: $("#ed-area").value, started_at: startISO, ended_at: endISO };
   const { data, error } = await sb.from("entries").update(payload).eq("id", e.id).select().single();
