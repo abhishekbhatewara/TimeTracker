@@ -510,16 +510,16 @@ async function deleteEntry(id) {
   if (error) return toast(error.message);
   state.entries = state.entries.filter((x) => x.id !== id);
   if (state.running?.id === id) state.running = null;
-  render();
+  render(); refreshOpenReportDay();
   toastUndo("Entry deleted", async () => {
     const { data, error: e2 } = await sb.from("entries").insert({
-      user_id: state.user.id, area_id: e.area_id, note: e.note,
+      user_id: state.user.id, area_id: e.area_id, note: e.note, persons: e.persons || [],
       started_at: e.started_at, ended_at: e.ended_at, source: e.source,
     }).select().single();
     if (e2) return toast(e2.message);
     state.entries.unshift(data);
     state.running = state.entries.find((x) => !x.ended_at) || null;
-    render();
+    render(); refreshOpenReportDay();
   });
 }
 
@@ -874,7 +874,10 @@ async function saveEditor() {
   if (error) return toast(error.message);
   Object.assign(e, data);
   state.running = state.entries.find((x) => !x.ended_at) || null;
-  closeEditor(); render(); toast("Updated");
+  closeEditor(); render(); refreshOpenReportDay(); toast("Updated");
+}
+function refreshOpenReportDay() {
+  if (!$("#view-reports").classList.contains("hidden") && state.reportDay) renderDayDetail(state.reportDay);
 }
 async function deleteFromEditor() {
   const id = state.editId;
@@ -936,10 +939,29 @@ function periodSummaryHTML(rangeEntries, opts = {}) {
 }
 
 function renderDayDetail(dateStr) {
+  state.reportDay = dateStr;
   const d = new Date(dateStr + "T00:00"); const next = new Date(d); next.setDate(next.getDate() + 1);
   const head = `<div class="rep-dayhead">${d.toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" })}</div>`;
   const entries = entriesInRange(d, next);
-  $("#day-detail").innerHTML = head + dayTimelineHTML(entries) + periodSummaryHTML(entries);
+  const box = $("#day-detail");
+  box.innerHTML = head + dayTimelineHTML(entries) + dayEntriesHTML(entries) + periodSummaryHTML(entries);
+  box.querySelectorAll(".day-entries .edit").forEach((b) => {
+    b.onclick = () => { const e = state.entries.find((x) => x.id === b.dataset.id); if (e) openEditor(e); };
+  });
+}
+// Editable list of a day's entries (tap ✎ to fix time/category, or delete in the editor).
+function dayEntriesHTML(entries) {
+  const list = entries.filter((e) => e.ended_at).sort((a, b) => new Date(a.started_at) - new Date(b.started_at));
+  if (!list.length) return "";
+  let html = `<div class="rep-sub">Entries — tap ✎ to edit</div><div class="day-entries entry-list">`;
+  for (const e of list) {
+    const a = areaById(e.area_id);
+    html += `<div class="entry"><div class="bar" style="background:${a?.color || "#555"}"></div>
+      <div class="body"><div class="title">${escapeHtml(e.note || a?.name || "—")}</div>
+      <div class="sub">${fmtRange(e)} · ${fmtDur(minutesOf(e))}</div></div>
+      <button class="iconaction edit" data-id="${e.id}" title="Edit">✎</button></div>`;
+  }
+  return html + `</div>`;
 }
 
 // Horizontal timeline of the day's logged blocks (morning → evening).
@@ -1260,6 +1282,7 @@ function bind() {
   $("#quick-add").onclick = () => openPicker("quick");
   $("#pause-timer").onclick = () => (state.running?.paused_at ? resumeTimer() : pauseTimer());
   $("#stop-timer").onclick = stopTimer;
+  $("#edit-timer").onclick = () => { if (state.running) openEditor(state.running); };
   $("#picker-close").onclick = closePicker;
   $("#picker-confirm").onclick = confirmPicker;
   $("#picker-note").addEventListener("input", onPickerNoteInput);
