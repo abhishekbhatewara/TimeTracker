@@ -692,11 +692,33 @@ async function saveTodoEditor() {
     persons: parsePersons($("#te-person").value), default_min: Number($("#te-min").value) || 0,
     due_date: $("#te-due").value || null, carry_silenced: !$("#te-carry").checked,
   };
+  const oldTitle = t.title;
   const { data, error } = await sb.from("todos").update(payload).eq("id", t.id).select().single();
   if (error) return toast(error.message);
   Object.assign(t, data);
+  if (oldTitle.trim().toLowerCase() !== title.trim().toLowerCase()) {
+    await renameTaskEverywhere(oldTitle, title, t.id);   // propagate to plan items + logged entries
+  }
   state.todos.sort((a, b) => a.title.localeCompare(b.title));
-  closeTodoEditor(); renderTodos(); renderPlan(); renderCarryForward(); toast("Saved");
+  closeTodoEditor(); render(); renderTodos(); refreshOpenReportDay(); toast("Saved");
+}
+// Propagate a to-do rename to its planned items and logged entries (and timeline/reports).
+async function renameTaskEverywhere(oldTitle, newTitle, todoId) {
+  const ol = oldTitle.trim().toLowerCase();
+  for (const p of state.planHistory || []) {
+    if (p.todo_id === todoId || (p.task || "").trim().toLowerCase() === ol) {
+      if (p.task !== newTitle) {
+        await sb.from("plan_items").update({ task: newTitle, todo_id: todoId }).eq("id", p.id);
+        p.task = newTitle; p.todo_id = todoId;
+      }
+    }
+  }
+  for (const e of state.entries) {
+    if ((e.note || "").trim().toLowerCase() === ol) {
+      await sb.from("entries").update({ note: newTitle }).eq("id", e.id);
+      e.note = newTitle;
+    }
+  }
 }
 async function deleteFromTodoEditor() {
   const id = state.todoEditId;

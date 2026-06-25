@@ -37,6 +37,26 @@
     <main id="main">
       <!-- ---------- TODAY ---------- -->
       <section id="view-today" class="view">
+        <!-- Timer -->
+        <div class="timer-card" id="timer-card">
+          <div id="timer-idle">
+            <button id="start-timer" class="btn primary block">▶ Start timer</button>
+            <button id="quick-add" class="btn ghost block">＋ Add a past block</button>
+          </div>
+          <div id="timer-running" class="hidden">
+            <div class="running-meta">
+              <div class="running-dot"></div>
+              <div>
+                <div id="running-label" class="running-label"></div>
+                <div id="running-elapsed" class="running-elapsed">0:00</div>
+              </div>
+            </div>
+            <button id="pause-timer" class="btn ghost block">⏸ Pause</button>
+            <button id="stop-timer" class="btn danger block">■ Stop &amp; save</button>
+            <button id="edit-timer" class="btn ghost block">✎ Fix start/end time</button>
+          </div>
+        </div>
+
         <!-- Carry forward -->
         <div class="card carry-card hidden" id="carry-card">
           <div class="section-row">
@@ -61,26 +81,6 @@
             </div>
           </div>
           <div id="plan-list" class="plan-list"></div>
-        </div>
-
-        <!-- Timer -->
-        <div class="timer-card" id="timer-card">
-          <div id="timer-idle">
-            <button id="start-timer" class="btn primary block">▶ Start timer</button>
-            <button id="quick-add" class="btn ghost block">＋ Add a past block</button>
-          </div>
-          <div id="timer-running" class="hidden">
-            <div class="running-meta">
-              <div class="running-dot"></div>
-              <div>
-                <div id="running-label" class="running-label"></div>
-                <div id="running-elapsed" class="running-elapsed">0:00</div>
-              </div>
-            </div>
-            <button id="pause-timer" class="btn ghost block">⏸ Pause</button>
-            <button id="stop-timer" class="btn danger block">■ Stop &amp; save</button>
-            <button id="edit-timer" class="btn ghost block">✎ Fix start/end time</button>
-          </div>
         </div>
 
         <!-- Logged today -->
@@ -307,7 +307,7 @@
 
   <div id="toast" class="toast hidden"></div>
 
-  <script type="module" src="config.js?v=20"></script>
-  <script type="module" src="app.js?v=20"></script>
+  <script type="module" src="config.js?v=21"></script>
+  <script type="module" src="app.js?v=21"></script>
 </body>
 </html>
