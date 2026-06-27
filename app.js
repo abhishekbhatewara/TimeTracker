@@ -20,8 +20,9 @@ const state = {
   editId: null,
   todoEditId: null,
   personFilter: "",
-  todoSort: "title",
+  todoSort: "category",
   todoSearch: "",
+  reportTab: "daily",
   showDone: false,
   tick: null,
 };
@@ -282,23 +283,39 @@ function dueSoonCandidates() {
       !inToday.has(td.title.trim().toLowerCase()))
     .sort((a, b) => a.due_date.localeCompare(b.due_date) || a.title.localeCompare(b.title));
 }
+// Tasks in a category named "Daily" — offered every morning (recurring; done flag ignored).
+function dailyCandidates() {
+  const area = state.areas.find((a) => a.name.trim().toLowerCase() === "daily");
+  if (!area) return [];
+  const inToday = new Set(state.plan.map((p) => p.task.trim().toLowerCase()));
+  return state.todos
+    .filter((t) => t.area_id === area.id && !inToday.has(t.title.trim().toLowerCase()))
+    .sort((a, b) => a.title.localeCompare(b.title));
+}
 function showDueAsk() {
   const today = localDateStr(new Date());
   const key = "ta-dueask-" + state.user.id;
   if (localStorage.getItem(key) === today) return;   // already prompted today
-  const cands = dueSoonCandidates();
-  if (!cands.length) return;
+  const daily = dailyCandidates();
+  const due = dueSoonCandidates().filter((t) => !daily.some((d) => d.id === t.id));
+  if (!daily.length && !due.length) return;
   const box = $("#dueask-list"); box.innerHTML = "";
-  for (const td of cands) {
-    const a = areaById(td.area_id), due = dueLabel(td.due_date);
-    const row = document.createElement("label");
-    row.className = "dueask-item";
-    row.innerHTML = `<input type="checkbox" checked data-id="${td.id}" />
-      <span class="dot" style="background:${a?.color || "#555"}"></span>
-      <span class="da-title">${escapeHtml(td.title)}</span>
-      <span class="due-badge ${due.cls}">${due.text}</span>`;
-    box.appendChild(row);
-  }
+  const addGroup = (label, items, badgeFn) => {
+    if (!items.length) return;
+    box.insertAdjacentHTML("beforeend", `<div class="dueask-group">${label}</div>`);
+    for (const td of items) {
+      const a = areaById(td.area_id);
+      const row = document.createElement("label");
+      row.className = "dueask-item";
+      row.innerHTML = `<input type="checkbox" checked data-id="${td.id}" />
+        <span class="dot" style="background:${a?.color || "#555"}"></span>
+        <span class="da-title">${escapeHtml(td.title)}</span>
+        ${badgeFn ? badgeFn(td) : ""}`;
+      box.appendChild(row);
+    }
+  };
+  addGroup("Daily", daily, null);
+  addGroup("Due soon", due, (td) => { const d = dueLabel(td.due_date); return `<span class="due-badge ${d.cls}">${d.text}</span>`; });
   $("#dueask").classList.remove("hidden");
 }
 function dismissDueAsk() {
@@ -405,9 +422,11 @@ function renderPlan() {
     row.innerHTML = `${lead}
       <div class="body"><div class="title${isDone ? " struck" : ""}">${escapeHtml(pi.task)}</div>
       <div class="sub">${a?.name || "—"} · ${pi.planned_min}m planned${personsOf(pi).length ? ` · <span class="person">👤 ${escapeHtml(personsOf(pi).join(", "))}</span>` : ""}</div></div>
+      <button class="iconaction pedit" title="Edit task">✎</button>
       ${isDone ? "" : `<button class="iconaction play" title="Start timer">▶</button>`}
       <button class="iconaction del" title="Remove">✕</button>`;
     if (todo) row.querySelector(".done-toggle").onclick = () => toggleDone(todo);
+    row.querySelector(".pedit").onclick = () => editPlanTask(pi, todo);
     if (!isDone) row.querySelector(".play").onclick = () => startTimer(pi.area_id, pi.task, personsOf(pi));
     row.querySelector(".del").onclick = () => deletePlan(pi.id);
     box.appendChild(row);
@@ -503,7 +522,7 @@ async function quickAdd(areaId, note, persons, startISO, endISO) {
   }).select().single();
   if (error) return toast(error.message);
   state.entries.unshift(data);
-  render(); toast("Block added");
+  render(); refreshOpenReportDay(); toast("Block added");
   await maybeAskDone(note);
 }
 // After logging time on a task that matches an existing to-do, offer to mark it done.
@@ -573,6 +592,31 @@ function onPlanTaskInput() {
   if (t.default_min && !Number($("#plan-min").value)) $("#plan-min").value = t.default_min;
 }
 
+// Quick-capture a task with just a title (uncategorised); add category/time/person later.
+async function quickAddTask() {
+  const title = await askPrompt("Quick add a task", "", "Add");
+  if (title == null) return;
+  const t = title.trim();
+  if (!t) return;
+  if (todoByTitle(t)) return toast("Already on your list");
+  const todo = await ensureTodo(t, null, 0, [], null);   // no category yet
+  if (!todo) return;
+  renderTodos(); renderPlan();
+  toast(`“${todo.title}” added — set details anytime`);
+}
+
+// Edit a planned task: open the linked to-do editor, or rename a one-off plan item.
+async function editPlanTask(pi, todo) {
+  if (todo) { openTodoEditor(todo); return; }
+  const neu = await askPrompt("Rename task", pi.task);
+  if (neu == null) return;
+  const t = neu.trim();
+  if (!t || t === pi.task) return;
+  const { error } = await sb.from("plan_items").update({ task: t }).eq("id", pi.id);
+  if (error) return toast(error.message);
+  pi.task = t; renderPlan(); renderPVA(); toast("Updated");
+}
+
 // ---------- plan actions ----------
 async function addPlanItem() {
   const task = $("#plan-task").value.trim();
@@ -623,6 +667,7 @@ function renderPersonControls() {
 function renderTodos() {
   fillAreaSelect($("#todo-area"));
   renderPersonControls();
+  $("#todo-sort").value = state.todoSort;   // reflect default (category)
   const box = $("#todo-list"); box.innerHTML = "";
   const doneCount = state.todos.filter((t) => t.done_at).length;
   $("#showdone-label").textContent = `Show done${doneCount ? ` (${doneCount})` : ""}`;
@@ -799,7 +844,7 @@ async function deletePlan(id) {
 }
 
 // ===================================================== picker (start / past block)
-function openPicker(mode) {
+function openPicker(mode, presetDate) {
   state.pick = { areaId: null, mode };
   $("#picker-title").textContent = mode === "timer" ? "Start timer" : "Add a past block";
   $("#picker-confirm").textContent = mode === "timer" ? "Start" : "Add block";
@@ -811,7 +856,7 @@ function openPicker(mode) {
     .filter((t) => !t.done_at).map((t) => `<option value="${escapeAttr(t.title)}">`).join("");
   if (mode === "quick") {
     const now = new Date(); const h = new Date(now - 30 * 60000);
-    $("#pk-date").value = localDateStr(now);
+    $("#pk-date").value = presetDate || localDateStr(now);
     $("#pk-start").value = hhmm(h); $("#pk-end").value = hhmm(now);
   }
   const box = $("#picker-areas"); box.innerHTML = "";
@@ -925,11 +970,16 @@ async function deleteFromEditor() {
 // ===================================================== REPORTS
 function renderReports() {
   renderHeatmap();
-  renderDayDetail(localDateStr(new Date()));   // today's report by default
+  renderDayDetail(state.reportDay || localDateStr(new Date()));
   $("#week-report").innerHTML = periodSummaryHTML(weekEntries().list, { withAlignment: true });
   $("#month-report").innerHTML = periodSummaryHTML(monthEntries(), { withAlignment: true });
   renderAnalysis();
   renderTrendLine();
+  applyReportTab();
+}
+function applyReportTab() {
+  $$("#report-subtabs .subtab").forEach((b) => b.classList.toggle("active", b.dataset.pane === state.reportTab));
+  $$("#view-reports .report-pane").forEach((p) => p.classList.toggle("hidden", p.dataset.pane !== state.reportTab));
 }
 
 function monthEntries() {
@@ -981,10 +1031,12 @@ function renderDayDetail(dateStr) {
   const head = `<div class="rep-dayhead">${d.toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" })}</div>`;
   const entries = entriesInRange(d, next);
   const box = $("#day-detail");
-  box.innerHTML = head + dayTimelineHTML(entries) + dayEntriesHTML(entries) + periodSummaryHTML(entries);
+  box.innerHTML = head + dayTimelineHTML(entries) + dayEntriesHTML(entries) + periodSummaryHTML(entries) +
+    `<button class="btn ghost block day-addblock">＋ Add a block on this day</button>`;
   box.querySelectorAll(".day-entries .edit").forEach((b) => {
     b.onclick = () => { const e = state.entries.find((x) => x.id === b.dataset.id); if (e) openEditor(e); };
   });
+  box.querySelector(".day-addblock").onclick = () => openPicker("quick", dateStr);
 }
 // Editable list of a day's entries (tap ✎ to fix time/category, or delete in the editor).
 function dayEntriesHTML(entries) {
@@ -1320,6 +1372,8 @@ function bind() {
   $("#pause-timer").onclick = () => (state.running?.paused_at ? resumeTimer() : pauseTimer());
   $("#stop-timer").onclick = stopTimer;
   $("#edit-timer").onclick = () => { if (state.running) openEditor(state.running); };
+  $("#fab").onclick = quickAddTask;
+  $$("#report-subtabs .subtab").forEach((b) => (b.onclick = () => { state.reportTab = b.dataset.pane; applyReportTab(); }));
   $("#picker-close").onclick = closePicker;
   $("#picker-confirm").onclick = confirmPicker;
   $("#picker-note").addEventListener("input", onPickerNoteInput);

@@ -100,24 +100,31 @@
       <!-- ---------- REPORTS ---------- -->
       <section id="view-reports" class="view hidden">
         <h2>Reports</h2>
-        <div class="card">
+        <div class="subtabs" id="report-subtabs">
+          <button class="subtab active" data-pane="daily">Daily</button>
+          <button class="subtab" data-pane="week">Week</button>
+          <button class="subtab" data-pane="month">Month</button>
+          <button class="subtab" data-pane="analysis">Analysis</button>
+          <button class="subtab" data-pane="trend">Trend</button>
+        </div>
+        <div class="card report-pane" data-pane="daily">
           <h3>Daily <span class="muted small">— tap a day</span></h3>
           <div id="heatmap"></div>
           <div id="day-detail" class="report-detail"></div>
         </div>
-        <div class="card">
+        <div class="card report-pane hidden" data-pane="week">
           <h3>This week</h3>
           <div id="week-report"></div>
         </div>
-        <div class="card">
+        <div class="card report-pane hidden" data-pane="month">
           <h3>This month</h3>
           <div id="month-report"></div>
         </div>
-        <div class="card">
+        <div class="card report-pane hidden" data-pane="analysis">
           <h3>Analysis <span class="muted small">— last 30 days</span></h3>
           <div id="analysis"></div>
         </div>
-        <div class="card">
+        <div class="card report-pane hidden" data-pane="trend">
           <h3>Weekly alignment trend</h3>
           <div id="trend-line"></div>
         </div>
@@ -172,6 +179,8 @@
         </div>
       </section>
     </main>
+
+    <button id="fab" class="fab" title="Quick add a task">＋</button>
 
     <nav class="tabbar">
       <button class="tab active" data-view="today">◴<span>Today</span></button>
@@ -307,7 +316,7 @@
 
   <div id="toast" class="toast hidden"></div>
 
-  <script type="module" src="config.js?v=22"></script>
-  <script type="module" src="app.js?v=22"></script>
+  <script type="module" src="config.js?v=23"></script>
+  <script type="module" src="app.js?v=23"></script>
 </body>
 </html>
