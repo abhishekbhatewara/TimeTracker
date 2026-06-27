@@ -701,7 +701,7 @@ function renderTodos() {
     for (const t of list) { const k = t.area_id || "__none__"; (groups.get(k) || groups.set(k, []).get(k)).push(t); }
     const keys = [...groups.keys()].sort((x, y) => (areaById(x)?.sort_order ?? 999) - (areaById(y)?.sort_order ?? 999));
     for (const k of keys) {
-      const a = areaById(k), items = groups.get(k), collapsed = state.collapsedCats.has(k);
+      const a = areaById(k), items = groups.get(k), collapsed = !q && state.collapsedCats.has(k);
       const hdr = document.createElement("div");
       hdr.className = "cat-header" + (collapsed ? " collapsed" : "");
       hdr.innerHTML = `<span class="cat-chev">▾</span>
