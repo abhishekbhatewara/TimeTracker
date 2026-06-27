@@ -235,6 +235,7 @@ textarea{resize:vertical}
 .todo-row .iconaction{padding:2px 5px;font-size:.95rem;flex:none}
 .todo-row .toplan{color:var(--good);font-size:1.15rem;font-weight:700}
 .mini-person{font-size:.8rem;opacity:.75;flex:none}
+.recurs{font-size:.85rem;flex:none;color:var(--primary2);opacity:.8}
 .due-badge.mini{font-size:.64rem;padding:2px 6px;flex:none}
 .planned-badge.mini{font-size:.95rem;padding:0 4px;flex:none}
 

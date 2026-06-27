@@ -72,6 +72,21 @@ function weekStartOf(date) {
 const areaById = (id) => state.areas.find((a) => a.id === id);
 const hasTarget = (a) => a.target_pct != null && a.target_pct > 0;
 
+// ----- Recurring "Daily" tasks -----
+// A task whose category is named "Daily" recurs every day: marking it done only
+// counts for the day it was done, then it auto-resets the next day. There's no
+// nightly job — "done-ness" is computed at read time by comparing done_at's
+// local date to today, so the reset is automatic and offline-safe.
+const dailyAreaId = () => state.areas.find((a) => a.name.trim().toLowerCase() === "daily")?.id ?? null;
+const isDailyTodo = (t) => t && t.area_id != null && t.area_id === dailyAreaId();
+// True if this to-do should currently show as done. One-offs: any done_at.
+// Daily tasks: only if done_at falls on today (otherwise it has reset).
+function isDoneNow(t) {
+  if (!t || !t.done_at) return false;
+  if (!isDailyTodo(t)) return true;
+  return localDateStr(new Date(t.done_at)) === localDateStr(new Date());
+}
+
 function escapeHtml(s) { return String(s).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c])); }
 function escapeAttr(s) { return String(s).replace(/"/g, "&quot;"); }
 
@@ -181,7 +196,7 @@ function carryForwardCandidates() {
     const key = p.task.trim().toLowerCase();
     if (seen.has(key) || inToday.has(key)) continue;
     const todo = p.todo_id ? state.todos.find((t) => t.id === p.todo_id) : todoByTitle(p.task);
-    if (!todo || todo.done_at || todo.carry_silenced) continue;   // no live to-do, done, or silenced
+    if (!todo || isDoneNow(todo) || todo.carry_silenced) continue;   // no live to-do, done, or silenced
     seen.add(key);
     out.push({ ...p, todo });
   }
@@ -281,18 +296,19 @@ function dueSoonCandidates() {
   const tomorrow = localDateStr(t);
   const inToday = new Set(state.plan.map((p) => p.task.trim().toLowerCase()));
   return state.todos
-    .filter((td) => td.due_date && !td.done_at &&
+    .filter((td) => td.due_date && !isDoneNow(td) &&
       (td.due_date === today || td.due_date === tomorrow) &&
       !inToday.has(td.title.trim().toLowerCase()))
     .sort((a, b) => a.due_date.localeCompare(b.due_date) || a.title.localeCompare(b.title));
 }
-// Tasks in a category named "Daily" — offered every morning (recurring; done flag ignored).
+// Tasks in a category named "Daily" — offered every morning (recurring). A task
+// already done today is skipped; yesterday's done state has auto-reset (isDoneNow).
 function dailyCandidates() {
-  const area = state.areas.find((a) => a.name.trim().toLowerCase() === "daily");
-  if (!area) return [];
+  const aid = dailyAreaId();
+  if (aid == null) return [];
   const inToday = new Set(state.plan.map((p) => p.task.trim().toLowerCase()));
   return state.todos
-    .filter((t) => t.area_id === area.id && !inToday.has(t.title.trim().toLowerCase()))
+    .filter((t) => t.area_id === aid && !isDoneNow(t) && !inToday.has(t.title.trim().toLowerCase()))
     .sort((a, b) => a.title.localeCompare(b.title));
 }
 function showDueAsk() {
@@ -416,7 +432,7 @@ function renderPlan() {
     totalMin += pi.planned_min;
     const a = areaById(pi.area_id);
     const todo = pi.todo_id ? state.todos.find((t) => t.id === pi.todo_id) : todoByTitle(pi.task);
-    const isDone = !!todo?.done_at;
+    const isDone = isDoneNow(todo);
     const row = document.createElement("div");
     row.className = "plan-item" + (isDone ? " is-done" : "");
     const lead = todo
@@ -531,7 +547,7 @@ async function quickAdd(areaId, note, persons, startISO, endISO) {
 // After logging time on a task that matches an existing to-do, offer to mark it done.
 async function maybeAskDone(note) {
   const t = todoByTitle((note || "").trim());
-  if (!t || t.done_at) return;
+  if (!t || isDoneNow(t)) return;
   if (await askConfirm(`Logged time on “${t.title}”. Mark it done?`, "Mark done")) {
     const ts = new Date().toISOString();
     const { error } = await sb.from("todos").update({ done_at: ts }).eq("id", t.id);
@@ -583,7 +599,7 @@ async function ensureTodo(title, areaId, min, persons = [], due = null) {
 // list is easy: pick category → only its tasks suggest. Blank category = all.
 function fillPlanTodoOptions() {
   const aid = $("#plan-area").value;
-  const list = state.todos.filter((t) => !t.done_at && (!aid || t.area_id === aid));
+  const list = state.todos.filter((t) => !isDoneNow(t) && (!aid || t.area_id === aid));
   $("#todo-options").innerHTML = list.map((t) => `<option value="${escapeAttr(t.title)}">`).join("");
 }
 
@@ -672,10 +688,10 @@ function renderTodos() {
   renderPersonControls();
   $("#todo-sort").value = state.todoSort;   // reflect default (category)
   const box = $("#todo-list"); box.innerHTML = "";
-  const doneCount = state.todos.filter((t) => t.done_at).length;
+  const doneCount = state.todos.filter((t) => isDoneNow(t)).length;
   $("#showdone-label").textContent = `Show done${doneCount ? ` (${doneCount})` : ""}`;
   let list = state.todos.filter((t) => !state.personFilter || personsOf(t).includes(state.personFilter));
-  if (!state.showDone) list = list.filter((t) => !t.done_at);
+  if (!state.showDone) list = list.filter((t) => !isDoneNow(t));
   const q = state.todoSearch.trim().toLowerCase();
   if (q) list = list.filter((t) =>
     t.title.toLowerCase().includes(q) ||
@@ -733,12 +749,13 @@ function todoRowEl(t) {
   const planned = inTodayPlan(t.title);
   const due = dueLabel(t.due_date);
   const ppl = personsOf(t);
-  const isDone = !!t.done_at;
+  const isDone = isDoneNow(t);
   const row = document.createElement("div");
   row.className = "todo-row" + (isDone ? " is-done" : "");
   row.innerHTML = `<button class="done-toggle${isDone ? " done" : ""}" title="${isDone ? "Mark not done" : "Mark done"}">${isDone ? "✓" : ""}</button>
     <span class="dot" style="background:${a?.color || "#555"}"></span>
     <span class="todo-title${isDone ? " struck" : ""}">${escapeHtml(t.title)}</span>
+    ${isDailyTodo(t) ? `<span class="recurs" title="Recurring daily — resets each day">↻</span>` : ""}
     ${ppl.length ? `<span class="mini-person" title="${escapeAttr(ppl.join(", "))}">👤</span>` : ""}
     ${due && !isDone ? `<span class="due-badge ${due.cls} mini">${due.text}</span>` : ""}
     <button class="iconaction edit" title="Edit">✎</button>
@@ -836,10 +853,11 @@ async function addTodoToPlan(t) {
   renderPlan(); renderPVA(); renderTodos(); toast("Added to today's plan");
 }
 async function toggleDone(t) {
-  if (!t.done_at) {   // confirm only when marking done, to avoid accidental taps
+  const done = isDoneNow(t);   // for Daily tasks, "done" means done today (auto-resets)
+  if (!done) {   // confirm only when marking done, to avoid accidental taps
     if (!(await askConfirm(`Mark “${t.title}” as done?`, "Mark done"))) return;
   }
-  const newVal = t.done_at ? null : new Date().toISOString();
+  const newVal = done ? null : new Date().toISOString();
   const { error } = await sb.from("todos").update({ done_at: newVal }).eq("id", t.id);
   if (error) return toast(error.message);
   t.done_at = newVal;
@@ -890,7 +908,7 @@ function openPicker(mode, presetDate) {
   renderPersonControls();
   // existing tasks to pick from (avoids duplicates) — active, not done
   $("#picker-todo-options").innerHTML = state.todos
-    .filter((t) => !t.done_at).map((t) => `<option value="${escapeAttr(t.title)}">`).join("");
+    .filter((t) => !isDoneNow(t)).map((t) => `<option value="${escapeAttr(t.title)}">`).join("");
   if (mode === "quick") {
     const now = new Date(); const h = new Date(now - 30 * 60000);
     $("#pk-date").value = presetDate || localDateStr(now);
@@ -1148,7 +1166,7 @@ function renderAnalysis() {
   const targetIds = new Set(state.areas.filter(hasTarget).map((a) => a.id));
   if (targetIds.size) {
     const loggedNotes = new Set(state.entries.filter((e) => e.ended_at).map((e) => (e.note || "").trim().toLowerCase()));
-    const notDone = state.todos.filter((t) => targetIds.has(t.area_id) && !t.done_at && !loggedNotes.has(t.title.trim().toLowerCase()));
+    const notDone = state.todos.filter((t) => targetIds.has(t.area_id) && !isDoneNow(t) && !loggedNotes.has(t.title.trim().toLowerCase()));
     html += `<div class="ana-item"><div class="ana-k">Not started — important categories</div>`;
     if (notDone.length) {
       html += `<ul class="rep-tasks">` + notDone.slice(0, 12).map((t) => {
@@ -1222,14 +1240,14 @@ function renderSetup() {
 function showTaskList(title, items) {
   $("#tasklist-title").textContent = title;
   const box = $("#tasklist-body"); box.innerHTML = "";
-  const sorted = [...items].sort((a, b) => (a.done_at ? 1 : 0) - (b.done_at ? 1 : 0) || a.title.localeCompare(b.title));
+  const sorted = [...items].sort((a, b) => (isDoneNow(a) ? 1 : 0) - (isDoneNow(b) ? 1 : 0) || a.title.localeCompare(b.title));
   if (!sorted.length) { box.innerHTML = `<div class="empty">No tasks.</div>`; }
   for (const t of sorted) {
     const a = areaById(t.area_id);
     const row = document.createElement("button");
     row.className = "tl-task";
     row.innerHTML = `<span class="dot" style="background:${a?.color || "#555"}"></span>
-      <span class="tl-name${t.done_at ? " struck" : ""}">${escapeHtml(t.title)}</span>
+      <span class="tl-name${isDoneNow(t) ? " struck" : ""}">${escapeHtml(t.title)}</span>
       <span class="muted small tl-cat">${a ? escapeHtml(a.name) : "No category"}</span>`;
     row.onclick = () => { closeTaskList(); openTodoEditor(t); };
     box.appendChild(row);
