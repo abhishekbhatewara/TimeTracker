@@ -25,6 +25,7 @@ const state = {
   reportTab: "daily",
   collapsedCats: new Set(),
   showDone: false,
+  dailyDone: new Set(),  // keys "todoId|YYYY-MM-DD" — per-day completions of Daily tasks
   tick: null,
 };
 
@@ -80,11 +81,37 @@ const hasTarget = (a) => a.target_pct != null && a.target_pct > 0;
 const dailyAreaId = () => state.areas.find((a) => a.name.trim().toLowerCase() === "daily")?.id ?? null;
 const isDailyTodo = (t) => t && t.area_id != null && t.area_id === dailyAreaId();
 // True if this to-do should currently show as done. One-offs: any done_at.
-// Daily tasks: only if done_at falls on today (otherwise it has reset).
+// Daily tasks: only if there's a completion logged for today (auto-resets daily).
 function isDoneNow(t) {
-  if (!t || !t.done_at) return false;
-  if (!isDailyTodo(t)) return true;
-  return localDateStr(new Date(t.done_at)) === localDateStr(new Date());
+  if (!t) return false;
+  if (isDailyTodo(t)) return state.dailyDone.has(t.id + "|" + localDateStr(new Date()));
+  return !!t.done_at;
+}
+const dailyDoneOn = (todoId, d) => state.dailyDone.has(todoId + "|" + localDateStr(d));
+// Current streak: consecutive completed days counting back from today. If today
+// isn't done yet, we count back from yesterday so an unfinished today (still in
+// progress) doesn't zero out an otherwise-live streak.
+function dailyStreak(todoId) {
+  const d = new Date(); d.setHours(0, 0, 0, 0);
+  if (!dailyDoneOn(todoId, d)) d.setDate(d.getDate() - 1);
+  let n = 0;
+  while (dailyDoneOn(todoId, d)) { n++; d.setDate(d.getDate() - 1); }
+  return n;
+}
+// Streak/habit stats over the loaded window: total completions + longest run.
+function dailyStats(todoId) {
+  const dates = [...state.dailyDone]
+    .filter((k) => k.startsWith(todoId + "|")).map((k) => k.slice(todoId.length + 1)).sort();
+  const set = new Set(dates);
+  let best = 0;
+  for (const ds of dates) {
+    const prev = new Date(ds + "T00:00:00"); prev.setDate(prev.getDate() - 1);
+    if (set.has(localDateStr(prev))) continue;   // not the start of a run
+    let n = 0; const d = new Date(ds + "T00:00:00");
+    while (set.has(localDateStr(d))) { n++; d.setDate(d.getDate() + 1); }
+    if (n > best) best = n;
+  }
+  return { total: dates.length, best, current: dailyStreak(todoId) };
 }
 
 function escapeHtml(s) { return String(s).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c])); }
@@ -165,12 +192,13 @@ async function loadAll() {
   const since = new Date(); since.setDate(since.getDate() - 84);
   const planSince = new Date(); planSince.setDate(planSince.getDate() - 30);
   const today = localDateStr(new Date());
-  const [areas, settings, entries, plan, todos] = await Promise.all([
+  const [areas, settings, entries, plan, todos, completions] = await Promise.all([
     sb.from("areas").select("*").eq("archived", false).order("sort_order"),
     sb.from("settings").select("*").eq("user_id", uid).maybeSingle(),
     sb.from("entries").select("*").or(`started_at.gte.${since.toISOString()},ended_at.is.null`).order("started_at", { ascending: false }),
     sb.from("plan_items").select("*").gte("date", localDateStr(planSince)).order("date").order("sort_order"),
     sb.from("todos").select("*").eq("archived", false).order("title"),
+    sb.from("daily_completions").select("todo_id,date").gte("date", localDateStr(since)),
   ]);
   state.areas = areas.data || [];
   state.settings = settings.data || { week_start: 1 };
@@ -178,6 +206,7 @@ async function loadAll() {
   state.planHistory = plan.data || [];                       // last ~30 days of plans
   state.plan = state.planHistory.filter((p) => p.date === today);  // today's plan
   state.todos = todos.data || [];
+  state.dailyDone = new Set((completions.data || []).map((c) => c.todo_id + "|" + c.date));
   state.running = state.entries.find((e) => !e.ended_at) || null;
   try { state.collapsedCats = new Set(JSON.parse(localStorage.getItem("ta-collapsed-" + uid) || "[]")); }
   catch { state.collapsedCats = new Set(); }
@@ -282,10 +311,7 @@ async function carryMarkDone(c) {
   const todo = c.todo;
   if (!todo) return;
   if (!(await askConfirm(`Mark “${todo.title}” as done?`, "Mark done"))) return;
-  const ts = new Date().toISOString();
-  const { error } = await sb.from("todos").update({ done_at: ts }).eq("id", todo.id);
-  if (error) return toast(error.message);
-  todo.done_at = ts;
+  if (!(await setTodoDone(todo, true))) return;
   renderCarryForward(); renderTodos(); toast("Marked done");
 }
 
@@ -549,10 +575,8 @@ async function maybeAskDone(note) {
   const t = todoByTitle((note || "").trim());
   if (!t || isDoneNow(t)) return;
   if (await askConfirm(`Logged time on “${t.title}”. Mark it done?`, "Mark done")) {
-    const ts = new Date().toISOString();
-    const { error } = await sb.from("todos").update({ done_at: ts }).eq("id", t.id);
-    if (error) return toast(error.message);
-    t.done_at = ts; renderTodos(); toast("Marked done");
+    if (!(await setTodoDone(t, true))) return;
+    renderTodos(); toast("Marked done");
   }
 }
 async function deleteEntry(id) {
@@ -750,12 +774,15 @@ function todoRowEl(t) {
   const due = dueLabel(t.due_date);
   const ppl = personsOf(t);
   const isDone = isDoneNow(t);
+  const daily = isDailyTodo(t);
+  const streak = daily ? dailyStreak(t.id) : 0;
   const row = document.createElement("div");
   row.className = "todo-row" + (isDone ? " is-done" : "");
   row.innerHTML = `<button class="done-toggle${isDone ? " done" : ""}" title="${isDone ? "Mark not done" : "Mark done"}">${isDone ? "✓" : ""}</button>
     <span class="dot" style="background:${a?.color || "#555"}"></span>
     <span class="todo-title${isDone ? " struck" : ""}">${escapeHtml(t.title)}</span>
-    ${isDailyTodo(t) ? `<span class="recurs" title="Recurring daily — resets each day">↻</span>` : ""}
+    ${daily ? `<button class="recurs" title="Recurring daily — tap for streak & history">↻</button>` : ""}
+    ${streak > 0 ? `<span class="streak" title="${streak}-day streak — tap ↻ for history">🔥 ${streak}</span>` : ""}
     ${ppl.length ? `<span class="mini-person" title="${escapeAttr(ppl.join(", "))}">👤</span>` : ""}
     ${due && !isDone ? `<span class="due-badge ${due.cls} mini">${due.text}</span>` : ""}
     <button class="iconaction edit" title="Edit">✎</button>
@@ -765,6 +792,7 @@ function todoRowEl(t) {
   row.querySelector(".edit").onclick = () => openTodoEditor(t);
   if (!isDone && !planned) row.querySelector(".toplan").onclick = () => addTodoToPlan(t);
   row.querySelector(".del").onclick = () => deleteTodo(t.id);
+  if (daily) row.querySelector(".recurs").onclick = () => openHabit(t);
   const mp = row.querySelector(".mini-person");
   if (mp) mp.onclick = () => showTaskList("👤 " + ppl.join(", "),
     state.todos.filter((x) => personsOf(x).some((p) => ppl.includes(p))));
@@ -852,17 +880,39 @@ async function addTodoToPlan(t) {
   state.plan.push(data);
   renderPlan(); renderPVA(); renderTodos(); toast("Added to today's plan");
 }
+// Set a to-do's done state. Daily tasks write a per-day completion row (so the
+// done-ness is scoped to today and history is kept for streaks); one-offs use
+// todos.done_at. Returns true on success.
+async function setTodoDone(todo, makeDone) {
+  if (isDailyTodo(todo)) {
+    const date = localDateStr(new Date());
+    const key = todo.id + "|" + date;
+    if (makeDone) {
+      const { error } = await sb.from("daily_completions")
+        .upsert({ user_id: state.user.id, todo_id: todo.id, date }, { onConflict: "todo_id,date" });
+      if (error) { toast(error.message); return false; }
+      state.dailyDone.add(key);
+    } else {
+      const { error } = await sb.from("daily_completions").delete().eq("todo_id", todo.id).eq("date", date);
+      if (error) { toast(error.message); return false; }
+      state.dailyDone.delete(key);
+    }
+  } else {
+    const newVal = makeDone ? new Date().toISOString() : null;
+    const { error } = await sb.from("todos").update({ done_at: newVal }).eq("id", todo.id);
+    if (error) { toast(error.message); return false; }
+    todo.done_at = newVal;
+  }
+  return true;
+}
 async function toggleDone(t) {
   const done = isDoneNow(t);   // for Daily tasks, "done" means done today (auto-resets)
   if (!done) {   // confirm only when marking done, to avoid accidental taps
     if (!(await askConfirm(`Mark “${t.title}” as done?`, "Mark done"))) return;
   }
-  const newVal = done ? null : new Date().toISOString();
-  const { error } = await sb.from("todos").update({ done_at: newVal }).eq("id", t.id);
-  if (error) return toast(error.message);
-  t.done_at = newVal;
+  if (!(await setTodoDone(t, !done))) return;
   renderTodos(); renderPlan(); renderCarryForward();
-  toast(newVal ? "Marked done" : "Marked not done");
+  toast(!done ? "Marked done" : "Marked not done");
 }
 async function deleteTodo(id) {
   const t = state.todos.find((x) => x.id === id);
@@ -1256,6 +1306,44 @@ function showTaskList(title, items) {
 }
 function closeTaskList() { $("#tasklist").classList.add("hidden"); }
 
+// ---------- habit / streak popup (for a recurring Daily task) ----------
+let _habitTodo = null;
+function openHabit(todo) {
+  _habitTodo = todo;
+  renderHabit();
+  $("#habit").classList.remove("hidden");
+}
+function closeHabit() { $("#habit").classList.add("hidden"); _habitTodo = null; }
+function renderHabit() {
+  const t = _habitTodo; if (!t) return;
+  $("#habit-title").textContent = t.title;
+  const s = dailyStats(t.id);
+  const doneToday = isDoneNow(t);
+  $("#habit-stats").innerHTML = `
+    <div class="hstat"><div class="hstat-n">🔥 ${s.current}</div><div class="hstat-l">Current streak</div></div>
+    <div class="hstat"><div class="hstat-n">🏆 ${s.best}</div><div class="hstat-l">Best streak</div></div>
+    <div class="hstat"><div class="hstat-n">${s.total}</div><div class="hstat-l">Done (84d)</div></div>`;
+  // last 12 weeks (84 days) of completion dots, oldest → today
+  const today = localDateStr(new Date());
+  let html = `<div class="heat">`;
+  for (let i = 83; i >= 0; i--) {
+    const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - i);
+    const ds = localDateStr(d);
+    const on = dailyDoneOn(t.id, d);
+    const bg = on ? "rgba(16,185,129,.9)" : "var(--surface2)";
+    html += `<div class="cell${ds === today ? " sel" : ""}" title="${d.toLocaleDateString()}: ${on ? "done" : "—"}" style="background:${bg}"></div>`;
+  }
+  html += `</div>`;
+  $("#habit-heat").innerHTML = html;
+  const btn = $("#habit-toggle");
+  btn.textContent = doneToday ? "Mark today not done" : "Mark today done";
+  btn.className = "btn " + (doneToday ? "ghost" : "primary");
+  btn.onclick = async () => {
+    if (!(await setTodoDone(t, !doneToday))) return;
+    renderHabit(); renderTodos(); renderPlan(); renderCarryForward();
+  };
+}
+
 // ---------- People manager ----------
 let _promptResolve = null;
 function askPrompt(msg, val = "", okLabel = "Save") {
@@ -1492,6 +1580,7 @@ function bind() {
   $("#prompt-ok").onclick = () => settlePrompt($("#prompt-input").value);
   $("#prompt-cancel").onclick = () => settlePrompt(null);
   $("#tasklist-close").onclick = closeTaskList;
+  $("#habit-close").onclick = closeHabit;
   $("#prompt-input").addEventListener("keydown", (e) => { if (e.key === "Enter") settlePrompt($("#prompt-input").value); });
   $$(".tab").forEach((t) => (t.onclick = () => showView(t.dataset.view)));
 }

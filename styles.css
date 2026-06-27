@@ -235,7 +235,16 @@ textarea{resize:vertical}
 .todo-row .iconaction{padding:2px 5px;font-size:.95rem;flex:none}
 .todo-row .toplan{color:var(--good);font-size:1.15rem;font-weight:700}
 .mini-person{font-size:.8rem;opacity:.75;flex:none}
-.recurs{font-size:.85rem;flex:none;color:var(--primary2);opacity:.8}
+.recurs{font-size:.85rem;flex:none;color:var(--primary2);opacity:.8;background:none;border:none;cursor:pointer;padding:0 2px}
+.recurs:hover{opacity:1}
+.streak{font-size:.72rem;flex:none;font-weight:700;color:var(--warn);white-space:nowrap}
+.habit-stats{display:flex;gap:10px;margin:4px 0 14px}
+.hstat{flex:1;text-align:center;background:var(--surface2);border-radius:12px;padding:10px 6px}
+.hstat-n{font-size:1.15rem;font-weight:800}
+.hstat-l{font-size:.68rem;color:var(--muted);margin-top:2px}
+.habit-sub{font-size:.72rem;color:var(--muted);margin-bottom:6px}
+#habit-heat{margin-bottom:16px}
+#habit-toggle{width:100%}
 .due-badge.mini{font-size:.64rem;padding:2px 6px;flex:none}
 .planned-badge.mini{font-size:.95rem;padding:0 4px;flex:none}
 

@@ -11,7 +11,7 @@
   <meta name="apple-mobile-web-app-title" content="Time Tracker" />
   <link rel="apple-touch-icon" href="icon-180.png" />
   <title>Abhishek's Time Tracker</title>
-  <link rel="stylesheet" href="styles.css?v=28" />
+  <link rel="stylesheet" href="styles.css?v=29" />
 </head>
 <body>
   <!-- ===================== AUTH ===================== -->
@@ -313,6 +313,20 @@
     </div>
   </div>
 
+  <!-- ===================== HABIT / STREAK MODAL ===================== -->
+  <div id="habit" class="modal hidden">
+    <div class="modal-card">
+      <div class="modal-head">
+        <h3 id="habit-title">Habit</h3>
+        <button id="habit-close" class="icon-btn">✕</button>
+      </div>
+      <div id="habit-stats" class="habit-stats"></div>
+      <div class="habit-sub">Last 12 weeks</div>
+      <div id="habit-heat"></div>
+      <button id="habit-toggle" class="btn primary">Mark today done</button>
+    </div>
+  </div>
+
   <!-- ===================== PROMPT MODAL ===================== -->
   <div id="prompt" class="modal center hidden">
     <div class="modal-card confirm-card">
@@ -327,7 +341,7 @@
 
   <div id="toast" class="toast hidden"></div>
 
-  <script type="module" src="config.js?v=28"></script>
-  <script type="module" src="app.js?v=28"></script>
+  <script type="module" src="config.js?v=29"></script>
+  <script type="module" src="app.js?v=29"></script>
 </body>
 </html>
