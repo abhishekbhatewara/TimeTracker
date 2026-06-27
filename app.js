@@ -699,7 +699,8 @@ function renderTodos() {
     // collapsible category sections
     const groups = new Map();
     for (const t of list) { const k = t.area_id || "__none__"; (groups.get(k) || groups.set(k, []).get(k)).push(t); }
-    const keys = [...groups.keys()].sort((x, y) => (areaById(x)?.sort_order ?? 999) - (areaById(y)?.sort_order ?? 999));
+    const so = (k) => k === "__none__" ? -1 : (areaById(k)?.sort_order ?? 999);   // No category first
+    const keys = [...groups.keys()].sort((x, y) => so(x) - so(y));
     for (const k of keys) {
       const a = areaById(k), items = groups.get(k), collapsed = !q && state.collapsedCats.has(k);
       const hdr = document.createElement("div");
@@ -1294,7 +1295,11 @@ function addAreaRow(a = null) {
   row.innerHTML = `<input type="color" value="${a?.color || "#6366f1"}" />
     <input class="nm" placeholder="Category name" value="${escapeAttr(a?.name || "")}" />
     <input class="pct" type="number" min="0" max="100" placeholder="—" value="${a && a.target_pct != null ? a.target_pct : ""}" title="Weekly target % (leave blank if not important)" />
+    <button class="mv up" title="Move up">↑</button>
+    <button class="mv down" title="Move down">↓</button>
     <button class="rm">✕</button>`;
+  row.querySelector(".up").onclick = () => { const p = row.previousElementSibling; if (p) row.parentNode.insertBefore(row, p); };
+  row.querySelector(".down").onclick = () => { const n = row.nextElementSibling; if (n) row.parentNode.insertBefore(n, row); };
   row.querySelector(".rm").onclick = () => {
     if (a && a.id) deleteCategory(a.id);   // existing category → confirm + reassign flow
     else row.remove();                      // unsaved new row → just drop it

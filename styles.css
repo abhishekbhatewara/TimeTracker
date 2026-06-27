@@ -271,6 +271,9 @@ textarea{resize:vertical}
 .area-edit input[type=color]{width:38px;height:38px;padding:2px;flex:none}
 .area-edit .nm{flex:1}
 .area-edit .pct{width:74px;flex:none;text-align:right}
+.area-edit .pct{width:56px}
+.area-edit .mv{flex:none;background:var(--surface2);border:1px solid var(--line);color:var(--muted);
+  border-radius:8px;width:28px;height:36px;font-size:.85rem;padding:0;cursor:pointer}
 .area-edit .rm{flex:none;color:var(--muted);background:none;border:none;font-size:1.1rem}
 .people-list{display:flex;flex-direction:column;gap:8px}
 .people-row{display:flex;align-items:center;gap:10px;background:var(--surface2);
