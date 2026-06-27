@@ -748,6 +748,9 @@ function todoRowEl(t) {
   row.querySelector(".edit").onclick = () => openTodoEditor(t);
   if (!isDone && !planned) row.querySelector(".toplan").onclick = () => addTodoToPlan(t);
   row.querySelector(".del").onclick = () => deleteTodo(t.id);
+  const mp = row.querySelector(".mini-person");
+  if (mp) mp.onclick = () => showTaskList("👤 " + ppl.join(", "),
+    state.todos.filter((x) => personsOf(x).some((p) => ppl.includes(p))));
   return row;
 }
 async function addTodo() {
@@ -1215,6 +1218,26 @@ function renderSetup() {
   renderPeople();
 }
 
+// ---------- task-list popup (tasks for a person / category) ----------
+function showTaskList(title, items) {
+  $("#tasklist-title").textContent = title;
+  const box = $("#tasklist-body"); box.innerHTML = "";
+  const sorted = [...items].sort((a, b) => (a.done_at ? 1 : 0) - (b.done_at ? 1 : 0) || a.title.localeCompare(b.title));
+  if (!sorted.length) { box.innerHTML = `<div class="empty">No tasks.</div>`; }
+  for (const t of sorted) {
+    const a = areaById(t.area_id);
+    const row = document.createElement("button");
+    row.className = "tl-task";
+    row.innerHTML = `<span class="dot" style="background:${a?.color || "#555"}"></span>
+      <span class="tl-name${t.done_at ? " struck" : ""}">${escapeHtml(t.title)}</span>
+      <span class="muted small tl-cat">${a ? escapeHtml(a.name) : "No category"}</span>`;
+    row.onclick = () => { closeTaskList(); openTodoEditor(t); };
+    box.appendChild(row);
+  }
+  $("#tasklist").classList.remove("hidden");
+}
+function closeTaskList() { $("#tasklist").classList.add("hidden"); }
+
 // ---------- People manager ----------
 let _promptResolve = null;
 function askPrompt(msg, val = "", okLabel = "Save") {
@@ -1239,10 +1262,13 @@ function renderPeople() {
     const n = counts.get(name);
     const row = document.createElement("div");
     row.className = "people-row";
-    row.innerHTML = `<span class="pname">${escapeHtml(name)}</span>
-      <span class="muted small">${n} task${n > 1 ? "s" : ""}</span>
+    row.innerHTML = `<span class="pname clickable">${escapeHtml(name)}</span>
+      <span class="muted small clickable">${n} task${n > 1 ? "s" : ""}</span>
       <button class="iconaction pren" title="Rename / merge">✎</button>
       <button class="iconaction pdel" title="Remove from all tasks">✕</button>`;
+    const open = () => showTaskList("👤 " + name, state.todos.filter((t) => personsOf(t).includes(name)));
+    row.querySelector(".pname").onclick = open;
+    row.querySelector(".muted.clickable").onclick = open;
     row.querySelector(".pren").onclick = () => renamePerson(name);
     row.querySelector(".pdel").onclick = () => deletePerson(name);
     box.appendChild(row);
@@ -1295,9 +1321,12 @@ function addAreaRow(a = null) {
   row.innerHTML = `<input type="color" value="${a?.color || "#6366f1"}" />
     <input class="nm" placeholder="Category name" value="${escapeAttr(a?.name || "")}" />
     <input class="pct" type="number" min="0" max="100" placeholder="—" value="${a && a.target_pct != null ? a.target_pct : ""}" title="Weekly target % (leave blank if not important)" />
+    ${a && a.id ? `<button class="vt" title="View tasks">📋</button>` : ""}
     <button class="mv up" title="Move up">↑</button>
     <button class="mv down" title="Move down">↓</button>
     <button class="rm">✕</button>`;
+  if (a && a.id) row.querySelector(".vt").onclick = () =>
+    showTaskList(a.name, state.todos.filter((t) => t.area_id === a.id));
   row.querySelector(".up").onclick = () => { const p = row.previousElementSibling; if (p) row.parentNode.insertBefore(row, p); };
   row.querySelector(".down").onclick = () => { const n = row.nextElementSibling; if (n) row.parentNode.insertBefore(n, row); };
   row.querySelector(".rm").onclick = () => {
@@ -1444,6 +1473,7 @@ function bind() {
   $("#dueask-close").onclick = dismissDueAsk;
   $("#prompt-ok").onclick = () => settlePrompt($("#prompt-input").value);
   $("#prompt-cancel").onclick = () => settlePrompt(null);
+  $("#tasklist-close").onclick = closeTaskList;
   $("#prompt-input").addEventListener("keydown", (e) => { if (e.key === "Enter") settlePrompt($("#prompt-input").value); });
   $$(".tab").forEach((t) => (t.onclick = () => showView(t.dataset.view)));
 }
