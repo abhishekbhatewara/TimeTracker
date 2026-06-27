@@ -23,6 +23,7 @@ const state = {
   todoSort: "category",
   todoSearch: "",
   reportTab: "daily",
+  collapsedCats: new Set(),
   showDone: false,
   tick: null,
 };
@@ -163,6 +164,8 @@ async function loadAll() {
   state.plan = state.planHistory.filter((p) => p.date === today);  // today's plan
   state.todos = todos.data || [];
   state.running = state.entries.find((e) => !e.ended_at) || null;
+  try { state.collapsedCats = new Set(JSON.parse(localStorage.getItem("ta-collapsed-" + uid) || "[]")); }
+  catch { state.collapsedCats = new Set(); }
 }
 
 // Tasks planned on an earlier day whose to-do still isn't done and that aren't
@@ -688,33 +691,63 @@ function renderTodos() {
       ((areaById(a.area_id)?.sort_order ?? 999) - (areaById(b.area_id)?.sort_order ?? 999)) ||
       a.title.localeCompare(b.title));
   }
-  for (const t of list) {
-    const a = areaById(t.area_id);
-    const planned = inTodayPlan(t.title);
-    const due = dueLabel(t.due_date);
-    const ppl = personsOf(t);
-    const sub = [a?.name || "No category", t.default_min ? t.default_min + "m" : null,
-      ppl.length ? `👤 ${escapeHtml(ppl.join(", "))}` : null].filter(Boolean).join(" · ");
-    const isDone = !!t.done_at;
-    const row = document.createElement("div");
-    row.className = "plan-item" + (isDone ? " is-done" : "");
-    row.innerHTML = `<button class="done-toggle${isDone ? " done" : ""}" title="${isDone ? "Mark not done" : "Mark done"}">${isDone ? "✓" : ""}</button>
-      <span class="dot" style="background:${a?.color || "#555"}"></span>
-      <div class="body"><div class="title${isDone ? " struck" : ""}">${escapeHtml(t.title)}</div>
-      <div class="sub">${sub}</div></div>
-      ${due && !isDone ? `<span class="due-badge ${due.cls}">${due.text}</span>` : ""}
-      <button class="iconaction edit" title="Edit">✎</button>
-      ${isDone || planned
-        ? (planned && !isDone ? `<span class="planned-badge" title="Already in today's plan">✓ Planned</span>` : "")
-        : `<button class="iconaction toplan" title="Add to today's plan">＋</button>`}
-      <button class="iconaction del" title="Remove">✕</button>`;
-    row.querySelector(".done-toggle").onclick = () => toggleDone(t);
-    row.querySelector(".edit").onclick = () => openTodoEditor(t);
-    if (!isDone && !planned) row.querySelector(".toplan").onclick = () => addTodoToPlan(t);
-    row.querySelector(".del").onclick = () => deleteTodo(t.id);
-    box.appendChild(row);
+  if (!list.length) {
+    box.innerHTML = `<div class="empty">${q ? `No tasks match “${escapeHtml(state.todoSearch.trim())}”.` : state.personFilter ? "No tasks for this person." : "No tasks yet. Add them above or paste your list."}</div>`;
+    return;
   }
-  if (!list.length) box.innerHTML = `<div class="empty">${q ? `No tasks match “${escapeHtml(state.todoSearch.trim())}”.` : state.personFilter ? "No tasks for this person." : "No tasks yet. Add them above or paste your list."}</div>`;
+  if (state.todoSort === "category") {
+    // collapsible category sections
+    const groups = new Map();
+    for (const t of list) { const k = t.area_id || "__none__"; (groups.get(k) || groups.set(k, []).get(k)).push(t); }
+    const keys = [...groups.keys()].sort((x, y) => (areaById(x)?.sort_order ?? 999) - (areaById(y)?.sort_order ?? 999));
+    for (const k of keys) {
+      const a = areaById(k), items = groups.get(k), collapsed = state.collapsedCats.has(k);
+      const hdr = document.createElement("div");
+      hdr.className = "cat-header" + (collapsed ? " collapsed" : "");
+      hdr.innerHTML = `<span class="cat-chev">▾</span>
+        <span class="dot" style="background:${a?.color || "#555"}"></span>
+        <span class="cat-name">${a ? escapeHtml(a.name) : "No category"}</span>
+        <span class="cat-count">${items.length}</span>`;
+      hdr.onclick = () => {
+        if (collapsed) state.collapsedCats.delete(k); else state.collapsedCats.add(k);
+        saveCollapsed(); renderTodos();
+      };
+      box.appendChild(hdr);
+      if (!collapsed) {
+        const wrap = document.createElement("div"); wrap.className = "cat-items";
+        for (const t of items) wrap.appendChild(todoRowEl(t));
+        box.appendChild(wrap);
+      }
+    }
+  } else {
+    for (const t of list) box.appendChild(todoRowEl(t));
+  }
+}
+function saveCollapsed() {
+  localStorage.setItem("ta-collapsed-" + state.user.id, JSON.stringify([...state.collapsedCats]));
+}
+// Compact one-line to-do row.
+function todoRowEl(t) {
+  const a = areaById(t.area_id);
+  const planned = inTodayPlan(t.title);
+  const due = dueLabel(t.due_date);
+  const ppl = personsOf(t);
+  const isDone = !!t.done_at;
+  const row = document.createElement("div");
+  row.className = "todo-row" + (isDone ? " is-done" : "");
+  row.innerHTML = `<button class="done-toggle${isDone ? " done" : ""}" title="${isDone ? "Mark not done" : "Mark done"}">${isDone ? "✓" : ""}</button>
+    <span class="dot" style="background:${a?.color || "#555"}"></span>
+    <span class="todo-title${isDone ? " struck" : ""}">${escapeHtml(t.title)}</span>
+    ${ppl.length ? `<span class="mini-person" title="${escapeAttr(ppl.join(", "))}">👤</span>` : ""}
+    ${due && !isDone ? `<span class="due-badge ${due.cls} mini">${due.text}</span>` : ""}
+    <button class="iconaction edit" title="Edit">✎</button>
+    ${isDone ? "" : (planned ? `<span class="planned-badge mini" title="In today's plan">✓</span>` : `<button class="iconaction toplan" title="Add to today's plan">＋</button>`)}
+    <button class="iconaction del" title="Remove">✕</button>`;
+  row.querySelector(".done-toggle").onclick = () => toggleDone(t);
+  row.querySelector(".edit").onclick = () => openTodoEditor(t);
+  if (!isDone && !planned) row.querySelector(".toplan").onclick = () => addTodoToPlan(t);
+  row.querySelector(".del").onclick = () => deleteTodo(t.id);
+  return row;
 }
 async function addTodo() {
   const title = $("#todo-new").value.trim();

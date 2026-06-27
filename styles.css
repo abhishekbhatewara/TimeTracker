@@ -214,6 +214,30 @@ textarea{resize:vertical}
 
 .plan-item .pedit{color:var(--muted);font-size:1rem}
 
+/* ---------- compact to-do list ---------- */
+.cat-header{display:flex;align-items:center;gap:8px;padding:11px 4px 5px;cursor:pointer;
+  user-select:none;position:sticky;top:0}
+.cat-header .cat-chev{font-size:.7rem;color:var(--muted);transition:transform .15s;width:12px}
+.cat-header.collapsed .cat-chev{transform:rotate(-90deg)}
+.cat-header .dot{width:10px;height:10px;border-radius:50%;flex:none}
+.cat-header .cat-name{font-weight:700;font-size:.9rem;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cat-header .cat-count{margin-left:auto;color:var(--muted);font-weight:700;font-size:.74rem;
+  background:var(--surface2);border:1px solid var(--line);border-radius:999px;padding:1px 9px;flex:none}
+.cat-items{display:flex;flex-direction:column;gap:5px;margin-bottom:4px}
+.todo-row{display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--line);
+  border-radius:10px;padding:7px 10px}
+.todo-row.is-done{opacity:.55}
+.todo-row .done-toggle{width:19px;height:19px;font-size:.66rem;flex:none}
+.todo-row .dot{width:9px;height:9px;border-radius:50%;flex:none}
+.todo-row .todo-title{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  font-weight:600;font-size:.9rem}
+.todo-row .todo-title.struck{text-decoration:line-through;color:var(--muted)}
+.todo-row .iconaction{padding:2px 5px;font-size:.95rem;flex:none}
+.todo-row .toplan{color:var(--good);font-size:1.15rem;font-weight:700}
+.mini-person{font-size:.8rem;opacity:.75;flex:none}
+.due-badge.mini{font-size:.64rem;padding:2px 6px;flex:none}
+.planned-badge.mini{font-size:.95rem;padding:0 4px;flex:none}
+
 /* ---------- report blocks ---------- */
 .report-detail{margin-top:14px;border-top:1px solid var(--line);padding-top:12px}
 .rep-dayhead{font-weight:700;margin-bottom:8px}
