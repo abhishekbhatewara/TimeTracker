@@ -152,6 +152,23 @@ textarea{resize:vertical}
   border-top:1px solid var(--line);margin-top:10px}
 .pva-foot.total{font-weight:700}
 .pva-foot .warn,.avt .warn{color:var(--warn)}
+/* planned-vs-actual redesign */
+.track{height:8px;background:var(--surface2);border-radius:5px;overflow:hidden;position:relative}
+.fill{height:100%;border-radius:5px}
+.pva-summary{margin-bottom:6px}
+.pva-sumtop{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px}
+.pva-sumtop b{font-size:1.05rem}
+.pva-pct{font-weight:800;color:var(--good)}
+.track.big{height:12px;border-radius:7px}
+.pva-meta{margin-top:6px}
+.pva-rows{display:flex;flex-direction:column;gap:11px;margin-top:14px}
+.pvarow-top{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:5px}
+.pvarow-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600;font-size:.92rem}
+.pvarow-name .dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:7px}
+.pvarow-status{flex:none;font-size:.82rem;font-weight:700}
+.pvarow-status.met{color:var(--good)}
+.pvarow-status.partial{color:var(--warn)}
+.pvarow-status.none{color:var(--muted);font-weight:600}
 .over{color:var(--warn)}.under{color:var(--primary2)}
 .req{color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0;font-size:.72rem}
 

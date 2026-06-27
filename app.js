@@ -429,28 +429,43 @@ function renderPVA() {
   if (!state.plan.length) { box.innerHTML = `<div class="empty">Plan some tasks to compare against what you actually did.</div>`; return; }
 
   const matched = new Set();
-  let plannedTotal = 0, actualTotal = 0;
-  for (const pi of state.plan) {
-    const key = pi.task.trim().toLowerCase();
-    matched.add(key);
-    const planned = pi.planned_min;
-    const actual = Math.round(actualByTask.get(key) || 0);
-    plannedTotal += planned; actualTotal += actual;
-    const pct = planned > 0 ? Math.min(100, (actual / planned) * 100) : (actual > 0 ? 100 : 0);
-    const over = planned > 0 && actual > planned;
-    const a = areaById(pi.area_id);
-    box.insertAdjacentHTML("beforeend", `<div class="avt">
-      <div class="avt-top"><span><span class="dot" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${a?.color || "#555"};margin-right:6px"></span>${escapeHtml(pi.task)}</span>
-        <span class="muted">${fmtDur(actual)} / ${fmtDur(planned)}${over ? " ⚠" : ""}</span></div>
-      <div class="track"><div class="fill" style="width:${pct}%;background:${over ? "var(--warn)" : (a?.color || "var(--primary)")}"></div></div></div>`);
-  }
-  // unplanned actual time
+  const rows = state.plan.map((pi) => {
+    const key = pi.task.trim().toLowerCase(); matched.add(key);
+    return { pi, planned: pi.planned_min, actual: Math.round(actualByTask.get(key) || 0) };
+  });
   let unplanned = 0;
   for (const [k, m] of actualByTask) if (k && !matched.has(k)) unplanned += m;
-  let extra = "";
-  if (Math.round(unplanned) >= 1) extra = `<div class="pva-foot"><span>Unplanned tasks</span><span class="warn">${fmtDur(unplanned)}</span></div>`;
-  box.insertAdjacentHTML("beforeend",
-    `<div class="pva-foot total"><span>Planned ${fmtDur(plannedTotal)}</span><span>Done ${fmtDur(actualTotal + unplanned)}</span></div>${extra}`);
+  const plannedTotal = rows.reduce((s, r) => s + r.planned, 0);
+  const doneOnPlan = rows.reduce((s, r) => s + r.actual, 0);
+  const pct = plannedTotal > 0 ? Math.min(100, Math.round(doneOnPlan / plannedTotal * 100)) : 0;
+  const doneCount = rows.filter((r) => r.planned > 0 && r.actual >= r.planned).length;
+
+  // ----- summary -----
+  let html = `<div class="pva-summary">
+    <div class="pva-sumtop"><span><b>${fmtDur(doneOnPlan)}</b> done of ${fmtDur(plannedTotal)} planned</span>
+      <span class="pva-pct">${pct}%</span></div>
+    <div class="track big"><div class="fill" style="width:${pct}%;background:var(--good)"></div></div>
+    <div class="pva-meta muted small">${doneCount}/${rows.length} tasks done${Math.round(unplanned) >= 1 ? ` · ＋${fmtDur(unplanned)} unplanned` : ""}</div>
+  </div><div class="pva-rows">`;
+
+  // ----- per task -----
+  for (const { pi, planned, actual } of rows) {
+    const a = areaById(pi.area_id);
+    let status, scls, w, col;
+    if (planned > 0) {
+      if (actual >= planned) { status = actual > planned ? `✓ done · +${fmtDur(actual - planned)}` : "✓ done"; scls = "met"; w = 100; col = "var(--good)"; }
+      else if (actual > 0) { status = `${fmtDur(planned - actual)} left`; scls = "partial"; w = actual / planned * 100; col = a?.color || "var(--warn)"; }
+      else { status = "not started"; scls = "none"; w = 0; col = "var(--line)"; }
+    } else {
+      status = actual > 0 ? `${fmtDur(actual)} done` : "—"; scls = actual > 0 ? "met" : "none"; w = actual > 0 ? 100 : 0; col = "var(--good)";
+    }
+    html += `<div class="pvarow">
+      <div class="pvarow-top">
+        <span class="pvarow-name"><span class="dot" style="background:${a?.color || "#777"}"></span>${escapeHtml(pi.task)}</span>
+        <span class="pvarow-status ${scls}">${status}</span></div>
+      <div class="track"><div class="fill" style="width:${w}%;background:${col}"></div></div></div>`;
+  }
+  box.innerHTML = html + `</div>`;
 }
 
 // ===================================================== entry actions
