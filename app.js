@@ -257,14 +257,17 @@ function renderCarryForward() {
   box.innerHTML = "";
   for (const c of cands) {
     const a = areaById(c.area_id);
+    const due = dueLabel(c.todo?.due_date);
     const row = document.createElement("div");
     row.className = "plan-item";
     row.innerHTML = `<span class="dot" style="background:${a?.color || "#555"}"></span>
       <div class="body"><div class="title">${escapeHtml(c.task)}</div>
-      <div class="sub">${a ? escapeHtml(a.name) : "No category"} · from ${relDay(c.date)}</div></div>
+      <div class="sub">${a ? escapeHtml(a.name) : "No category"} · from ${relDay(c.date)}${due ? ` · <span class="due-badge ${due.cls} mini">${due.text}</span>` : ""}</div></div>
+      <button class="iconaction cf-edit" title="Edit / reschedule — set a reminder date">✎</button>
       <button class="iconaction cf-add" title="Add to today's plan">＋</button>
       <button class="iconaction cf-done" title="Mark done">✓</button>
       <button class="iconaction cf-silence" title="Silence — stop carrying forward">🔕</button>`;
+    row.querySelector(".cf-edit").onclick = () => openTodoEditor(c.todo);
     row.querySelector(".cf-add").onclick = () => carryToToday(c);
     row.querySelector(".cf-done").onclick = () => carryMarkDone(c);
     row.querySelector(".cf-silence").onclick = () => carrySilence(c);
