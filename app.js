@@ -959,9 +959,11 @@ function openPicker(mode, presetDate) {
   $("#picker-times").classList.toggle("hidden", mode === "timer");
   $("#picker-note").value = ""; $("#picker-person").value = "";
   renderPersonControls();
-  // existing tasks to pick from (avoids duplicates) — active, not done
+  // All existing tasks to pick from — including done/completed ones, since you
+  // often log a past block against a task you already finished and marked done.
+  // Suggesting them here is exactly what prevents accidental duplicate tasks.
   $("#picker-todo-options").innerHTML = state.todos
-    .filter((t) => !isDoneNow(t)).map((t) => `<option value="${escapeAttr(t.title)}">`).join("");
+    .map((t) => `<option value="${escapeAttr(t.title)}">`).join("");
   if (mode === "quick") {
     const now = new Date(); const h = new Date(now - 30 * 60000);
     $("#pk-date").value = presetDate || localDateStr(now);
