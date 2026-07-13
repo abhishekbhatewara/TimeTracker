@@ -11,7 +11,7 @@
   <meta name="apple-mobile-web-app-title" content="Time Tracker" />
   <link rel="apple-touch-icon" href="icon-180.png" />
   <title>Abhishek's Time Tracker</title>
-  <link rel="stylesheet" href="styles.css?v=32" />
+  <link rel="stylesheet" href="styles.css?v=33" />
 </head>
 <body>
   <!-- ===================== AUTH ===================== -->
@@ -78,6 +78,17 @@
               <select id="plan-area" class="plan-area"></select>
               <input id="plan-min" type="number" min="0" step="5" placeholder="min" class="plan-min" />
               <button id="plan-add" class="btn primary plan-add">Add</button>
+            </div>
+          </div>
+          <div class="plan-viewbar">
+            <div class="segmented" id="plan-view-toggle">
+              <button class="seg active" data-view="list">List</button>
+              <button class="seg" data-view="schedule">Schedule</button>
+            </div>
+            <div class="sched-head hidden" id="sched-head">
+              <span class="muted small">from</span>
+              <input type="time" id="sched-start" value="09:00" />
+              <button id="sched-auto" class="btn ghost small-btn">⚡ Auto-arrange</button>
             </div>
           </div>
           <div id="plan-list" class="plan-list"></div>
@@ -361,7 +372,7 @@
 
   <div id="toast" class="toast hidden"></div>
 
-  <script type="module" src="config.js?v=32"></script>
-  <script type="module" src="app.js?v=32"></script>
+  <script type="module" src="config.js?v=33"></script>
+  <script type="module" src="app.js?v=33"></script>
 </body>
 </html>

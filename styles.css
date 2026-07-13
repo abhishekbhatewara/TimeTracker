@@ -129,6 +129,32 @@ textarea{resize:vertical}
 .plan-item .iconaction{background:none;border:none;color:var(--muted);font-size:1rem;padding:4px 6px}
 .plan-item .play{color:var(--primary2)}
 .plan-item .toplan{color:var(--good);font-size:1.2rem;font-weight:700}
+.time-chip{color:var(--primary2);font-weight:600}
+
+/* ---------- plan: List / Schedule ---------- */
+.plan-viewbar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:14px;flex-wrap:wrap}
+.segmented{display:inline-flex;background:var(--surface2);border:1px solid var(--line);border-radius:999px;padding:3px}
+.segmented .seg{background:none;border:none;color:var(--muted);border-radius:999px;padding:6px 16px;font-size:.84rem;font-weight:600;cursor:pointer}
+.segmented .seg.active{background:var(--primary);color:#fff}
+.sched-head{display:flex;align-items:center;gap:8px}
+.sched-head input[type=time]{background:var(--surface2);border:1px solid var(--line);color:var(--txt);border-radius:9px;padding:6px 8px;font-size:.84rem}
+.small-btn{padding:6px 12px;font-size:.82rem}
+.sched-row{display:flex;align-items:center;gap:10px;background:var(--surface2);border:1px solid var(--line);border-radius:12px;padding:8px 12px;margin-bottom:8px}
+.sched-row.overlaps{border-left:3px solid var(--warn)}
+.sched-row.is-done{opacity:.55}
+.sched-time{flex:none;width:96px;background:var(--surface);border:1px solid var(--line);color:var(--muted);border-radius:9px;padding:7px 8px;font-size:.82rem;font-variant-numeric:tabular-nums}
+.sched-time.set{color:var(--primary2);border-color:var(--primary);font-weight:600}
+.sched-row .dot{width:10px;height:10px;border-radius:50%;flex:none}
+.sched-row .body{flex:1;min-width:0}
+.sched-row .title{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sched-row .sub{font-size:.78rem;color:var(--muted)}
+.sched-row .iconaction{background:none;border:none;color:var(--muted);font-size:1rem;padding:4px 6px}
+.sched-row .play{color:var(--primary2)}
+.warn-txt{color:var(--warn);font-weight:600}
+.sched-group{font-size:.72rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin:14px 0 8px;font-weight:700}
+.sched-now{display:flex;align-items:center;gap:8px;margin:4px 0 10px}
+.sched-now::before,.sched-now::after{content:"";flex:1;height:2px;background:var(--primary)}
+.sched-now span{font-size:.68rem;font-weight:700;color:var(--primary2);white-space:nowrap}
 .done-toggle{flex:none;width:22px;height:22px;border-radius:50%;border:2px solid var(--line);
   background:transparent;color:#fff;font-size:.8rem;font-weight:800;display:flex;
   align-items:center;justify-content:center;cursor:pointer;padding:0}

@@ -26,6 +26,7 @@ const state = {
   collapsedCats: new Set(),
   showDone: false,
   dailyDone: new Set(),  // keys "todoId|YYYY-MM-DD" — per-day completions of Daily tasks
+  planView: "list",      // "list" | "schedule" — how today's plan is shown
   tick: null,
 };
 
@@ -47,6 +48,14 @@ const minutesOf = (e) => {
   return Math.max(0, ms) / 60000;
 };
 const localDateStr = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+// time-of-day helpers for the plan schedule (start_min = minutes from midnight)
+const nowMinutes = () => { const d = new Date(); return d.getHours() * 60 + d.getMinutes(); };
+const minToHHMM = (m) => `${pad(Math.floor(m / 60))}:${pad(m % 60)}`;          // for <input type=time>
+const hhmmToMin = (s) => { const [h, m] = (s || "").split(":").map(Number); return Number.isFinite(h) ? h * 60 + m : null; };
+const minToLabel = (m) => {                                                     // "9:00 AM"
+  const h = Math.floor(m / 60), mm = m % 60, ap = h < 12 ? "AM" : "PM", h12 = ((h + 11) % 12) + 1;
+  return `${h12}:${pad(mm)} ${ap}`;
+};
 const sameDay = (a, b) => localDateStr(a) === localDateStr(b);
 // Returns {text, cls} for a YYYY-MM-DD deadline, or null.
 function dueLabel(due) {
@@ -210,6 +219,7 @@ async function loadAll() {
   state.running = state.entries.find((e) => !e.ended_at) || null;
   try { state.collapsedCats = new Set(JSON.parse(localStorage.getItem("ta-collapsed-" + uid) || "[]")); }
   catch { state.collapsedCats = new Set(); }
+  state.planView = localStorage.getItem("ta-planview-" + uid) === "schedule" ? "schedule" : "list";
 }
 
 // Tasks planned on an earlier day whose to-do still isn't done and that aren't
@@ -488,32 +498,118 @@ function renderPlan() {
     state.areas.map((a) => `<option value="${a.id}">${escapeHtml(a.name)}</option>`).join("");
   pa.value = prev;   // preserve choice; "" (All) on first render
   fillPlanTodoOptions();
+  // reflect the current view in the toggle + show the schedule controls only there
+  $$("#plan-view-toggle .seg").forEach((b) => b.classList.toggle("active", b.dataset.view === state.planView));
+  $("#sched-head").classList.toggle("hidden", state.planView !== "schedule");
   const box = $("#plan-list"); box.innerHTML = "";
-  let totalMin = 0;
-  for (const pi of state.plan) {
-    totalMin += pi.planned_min;
-    const a = areaById(pi.area_id);
-    const todo = pi.todo_id ? state.todos.find((t) => t.id === pi.todo_id) : todoByTitle(pi.task);
-    const isDone = isDoneNow(todo);
-    const row = document.createElement("div");
-    row.className = "plan-item" + (isDone ? " is-done" : "");
-    const lead = todo
-      ? `<button class="done-toggle${isDone ? " done" : ""}" title="${isDone ? "Mark not done" : "Mark done"}">${isDone ? "✓" : ""}</button><span class="dot" style="background:${a?.color || "#555"}"></span>`
-      : `<span class="dot" style="background:${a?.color || "#555"}"></span>`;
-    row.innerHTML = `${lead}
-      <div class="body"><div class="title${isDone ? " struck" : ""}">${escapeHtml(pi.task)}</div>
-      <div class="sub">${a?.name || "—"} · ${pi.planned_min}m planned${personsOf(pi).length ? ` · <span class="person">👤 ${escapeHtml(personsOf(pi).join(", "))}</span>` : ""}</div></div>
-      <button class="iconaction pedit" title="Edit task">✎</button>
-      ${isDone ? "" : `<button class="iconaction play" title="Start timer">▶</button>`}
-      <button class="iconaction del" title="Remove">✕</button>`;
-    if (todo) row.querySelector(".done-toggle").onclick = () => toggleDone(todo);
-    row.querySelector(".pedit").onclick = () => editPlanTask(pi, todo);
-    if (!isDone) row.querySelector(".play").onclick = () => startTimer(pi.area_id, pi.task, personsOf(pi));
-    row.querySelector(".del").onclick = () => deletePlan(pi.id);
-    box.appendChild(row);
-  }
-  if (!state.plan.length) box.innerHTML = `<div class="empty">No tasks planned yet. Add a few above.</div>`;
+  const totalMin = state.plan.reduce((s, pi) => s + pi.planned_min, 0);
   $("#plan-total").textContent = totalMin ? `${fmtDur(totalMin)} planned` : "";
+  if (!state.plan.length) { box.innerHTML = `<div class="empty">No tasks planned yet. Add a few above.</div>`; return; }
+  if (state.planView === "schedule") { renderPlanSchedule(box); return; }
+  for (const pi of state.plan) box.appendChild(planListRow(pi));
+}
+// One row of the plain List view.
+function planListRow(pi) {
+  const a = areaById(pi.area_id);
+  const todo = pi.todo_id ? state.todos.find((t) => t.id === pi.todo_id) : todoByTitle(pi.task);
+  const isDone = isDoneNow(todo);
+  const row = document.createElement("div");
+  row.className = "plan-item" + (isDone ? " is-done" : "");
+  const lead = todo
+    ? `<button class="done-toggle${isDone ? " done" : ""}" title="${isDone ? "Mark not done" : "Mark done"}">${isDone ? "✓" : ""}</button><span class="dot" style="background:${a?.color || "#555"}"></span>`
+    : `<span class="dot" style="background:${a?.color || "#555"}"></span>`;
+  const timeChip = pi.start_min != null ? `<span class="time-chip">🕘 ${minToLabel(pi.start_min)}</span> · ` : "";
+  row.innerHTML = `${lead}
+    <div class="body"><div class="title${isDone ? " struck" : ""}">${escapeHtml(pi.task)}</div>
+    <div class="sub">${timeChip}${a?.name || "—"} · ${pi.planned_min}m planned${personsOf(pi).length ? ` · <span class="person">👤 ${escapeHtml(personsOf(pi).join(", "))}</span>` : ""}</div></div>
+    <button class="iconaction pedit" title="Edit task">✎</button>
+    ${isDone ? "" : `<button class="iconaction play" title="Start timer">▶</button>`}
+    <button class="iconaction del" title="Remove">✕</button>`;
+  if (todo) row.querySelector(".done-toggle").onclick = () => toggleDone(todo);
+  row.querySelector(".pedit").onclick = () => editPlanTask(pi, todo);
+  if (!isDone) row.querySelector(".play").onclick = () => startTimer(pi.area_id, pi.task, personsOf(pi));
+  row.querySelector(".del").onclick = () => deletePlan(pi.id);
+  return row;
+}
+// Schedule view: scheduled tasks in clock order (with a "now" line), then an
+// Unscheduled group. The time control is a native <input type=time> per row —
+// no custom picker, so it feels instant on a phone.
+function renderPlanSchedule(box) {
+  const scheduled = state.plan.filter((p) => p.start_min != null)
+    .sort((a, b) => a.start_min - b.start_min || a.sort_order - b.sort_order);
+  const unscheduled = state.plan.filter((p) => p.start_min == null);
+  const now = nowMinutes();
+  let prevEnd = null, nowDrawn = false;
+  for (const pi of scheduled) {
+    if (!nowDrawn && pi.start_min > now) { box.appendChild(nowLine()); nowDrawn = true; }
+    const overlaps = prevEnd != null && pi.start_min < prevEnd;
+    box.appendChild(schedRow(pi, overlaps));
+    prevEnd = pi.start_min + (pi.planned_min || 0);
+  }
+  if (scheduled.length && !nowDrawn) box.appendChild(nowLine());   // now is after everything
+  const head = document.createElement("div");
+  head.className = "sched-group";
+  head.textContent = unscheduled.length ? "Unscheduled" : "All tasks scheduled 🎉";
+  box.appendChild(head);
+  for (const pi of unscheduled) box.appendChild(schedRow(pi, false));
+}
+function nowLine() {
+  const el = document.createElement("div");
+  el.className = "sched-now";
+  el.innerHTML = `<span>now · ${minToLabel(nowMinutes())}</span>`;
+  return el;
+}
+function schedRow(pi, overlaps) {
+  const a = areaById(pi.area_id);
+  const todo = pi.todo_id ? state.todos.find((t) => t.id === pi.todo_id) : todoByTitle(pi.task);
+  const isDone = isDoneNow(todo);
+  const scheduled = pi.start_min != null;
+  const rangeLabel = scheduled
+    ? `${minToLabel(pi.start_min)}${pi.planned_min ? `–${minToLabel(pi.start_min + pi.planned_min)}` : ""}`
+    : `${pi.planned_min}m`;
+  const row = document.createElement("div");
+  row.className = "sched-row" + (isDone ? " is-done" : "") + (overlaps ? " overlaps" : "");
+  row.innerHTML = `<input type="time" class="sched-time${scheduled ? " set" : ""}" value="${scheduled ? minToHHMM(pi.start_min) : ""}" title="Set a start time" />
+    <span class="dot" style="background:${a?.color || "#555"}"></span>
+    <div class="body"><div class="title${isDone ? " struck" : ""}">${escapeHtml(pi.task)}</div>
+    <div class="sub">${a?.name || "—"} · ${rangeLabel}${overlaps ? ` · <span class="warn-txt">overlaps</span>` : ""}</div></div>
+    ${isDone ? "" : `<button class="iconaction play" title="Start timer">▶</button>`}
+    ${scheduled ? `<button class="iconaction cleartime" title="Unschedule">✕</button>` : ""}`;
+  row.querySelector(".sched-time").onchange = (e) => setPlanTime(pi, hhmmToMin(e.target.value));
+  if (!isDone) row.querySelector(".play").onclick = () => startTimer(pi.area_id, pi.task, personsOf(pi));
+  if (scheduled) row.querySelector(".cleartime").onclick = () => setPlanTime(pi, null);
+  return row;
+}
+async function setPlanTime(pi, startMin) {
+  const { error } = await sb.from("plan_items").update({ start_min: startMin }).eq("id", pi.id);
+  if (error) return toast(error.message);
+  pi.start_min = startMin;
+  renderPlan();
+}
+// Pack every planned task back-to-back from the chosen start time, in the order
+// they're currently listed, using each task's planned minutes (min 15 so a
+// zero-length task still gets a slot). One tap to turn a plan into a schedule.
+async function autoArrangePlan() {
+  const start = hhmmToMin($("#sched-start").value);
+  if (start == null) return toast("Pick a start time");
+  let cursor = start;
+  const updates = [];
+  for (const pi of state.plan) {
+    updates.push({ id: pi.id, start_min: cursor });
+    cursor += Math.max(15, pi.planned_min || 0);
+  }
+  for (const u of updates) {
+    const { error } = await sb.from("plan_items").update({ start_min: u.start_min }).eq("id", u.id);
+    if (error) return toast(error.message);
+    const pi = state.plan.find((p) => p.id === u.id); if (pi) pi.start_min = u.start_min;
+  }
+  renderPlan();
+  toast("Arranged from " + minToLabel(start));
+}
+function setPlanView(view) {
+  state.planView = view;
+  if (state.user) localStorage.setItem("ta-planview-" + state.user.id, view);
+  renderPlan();
 }
 
 // ---------- planned vs actual ----------
@@ -1590,6 +1686,8 @@ function bind() {
   $("#picker-note").addEventListener("input", onPickerNoteInput);
   $("#plan-add").onclick = addPlanItem;
   $("#carry-all").onclick = carryAllToToday;
+  $$("#plan-view-toggle .seg").forEach((b) => (b.onclick = () => setPlanView(b.dataset.view)));
+  $("#sched-auto").onclick = autoArrangePlan;
   $("#plan-area").addEventListener("change", fillPlanTodoOptions);
   $("#plan-task").addEventListener("input", onPlanTaskInput);
   $("#plan-task").addEventListener("keydown", (e) => { if (e.key === "Enter") addPlanItem(); });
