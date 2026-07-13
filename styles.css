@@ -78,6 +78,11 @@ textarea{resize:vertical}
 .chip{background:var(--surface2);border:1px solid var(--line);border-radius:999px;
   padding:8px 14px;font-size:.85rem;display:flex;align-items:center;gap:7px}
 .chip .dot{width:9px;height:9px;border-radius:50%}
+.snooze-chips{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0 14px}
+.snooze-chips .chip{cursor:pointer;justify-content:center;font-weight:600}
+.snooze-chips .chip:hover{border-color:var(--primary);color:var(--primary)}
+#snooze-days{margin-top:6px}
+#snooze-task{color:var(--txt);font-weight:600}
 
 /* ---------- entries ---------- */
 .entry-list{display:flex;flex-direction:column;gap:8px}

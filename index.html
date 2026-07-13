@@ -11,7 +11,7 @@
   <meta name="apple-mobile-web-app-title" content="Time Tracker" />
   <link rel="apple-touch-icon" href="icon-180.png" />
   <title>Abhishek's Time Tracker</title>
-  <link rel="stylesheet" href="styles.css?v=31" />
+  <link rel="stylesheet" href="styles.css?v=32" />
 </head>
 <body>
   <!-- ===================== AUTH ===================== -->
@@ -327,6 +327,26 @@
     </div>
   </div>
 
+  <!-- ===================== SNOOZE MODAL ===================== -->
+  <div id="snooze" class="modal center hidden">
+    <div class="modal-card confirm-card">
+      <h3>💤 Snooze task</h3>
+      <p class="muted small">Hide "<span id="snooze-task"></span>" from carry-forward, then bring it back after:</p>
+      <div class="snooze-chips">
+        <button class="chip" data-days="1">1 day</button>
+        <button class="chip" data-days="2">2 days</button>
+        <button class="chip" data-days="3">3 days</button>
+        <button class="chip" data-days="7">1 week</button>
+      </div>
+      <label class="pk-label" for="snooze-days">or enter days</label>
+      <input id="snooze-days" type="number" min="1" step="1" inputmode="numeric" placeholder="e.g. 5" />
+      <div class="confirm-actions">
+        <button id="snooze-cancel" class="btn ghost">Cancel</button>
+        <button id="snooze-ok" class="btn primary">Snooze</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ===================== PROMPT MODAL ===================== -->
   <div id="prompt" class="modal center hidden">
     <div class="modal-card confirm-card">
@@ -341,7 +361,7 @@
 
   <div id="toast" class="toast hidden"></div>
 
-  <script type="module" src="config.js?v=31"></script>
-  <script type="module" src="app.js?v=31"></script>
+  <script type="module" src="config.js?v=32"></script>
+  <script type="module" src="app.js?v=32"></script>
 </body>
 </html>

@@ -225,7 +225,9 @@ function carryForwardCandidates() {
     const key = p.task.trim().toLowerCase();
     if (seen.has(key) || inToday.has(key)) continue;
     const todo = p.todo_id ? state.todos.find((t) => t.id === p.todo_id) : todoByTitle(p.task);
-    if (!todo || isDoneNow(todo) || todo.carry_silenced) continue;   // no live to-do, done, or silenced
+    // skip when: no live to-do, done, silenced, or still snoozed (snooze_until in the future)
+    if (!todo || isDoneNow(todo) || todo.carry_silenced) continue;
+    if (todo.snooze_until && todo.snooze_until > today) continue;
     seen.add(key);
     out.push({ ...p, todo });
   }
@@ -266,10 +268,12 @@ function renderCarryForward() {
       <button class="iconaction cf-edit" title="Edit / reschedule — set a reminder date">✎</button>
       <button class="iconaction cf-add" title="Add to today's plan">＋</button>
       <button class="iconaction cf-done" title="Mark done">✓</button>
+      <button class="iconaction cf-snooze" title="Snooze — hide for a few days, then bring back">💤</button>
       <button class="iconaction cf-silence" title="Silence — stop carrying forward">🔕</button>`;
     row.querySelector(".cf-edit").onclick = () => openTodoEditor(c.todo);
     row.querySelector(".cf-add").onclick = () => carryToToday(c);
     row.querySelector(".cf-done").onclick = () => carryMarkDone(c);
+    row.querySelector(".cf-snooze").onclick = () => openSnooze(c);
     row.querySelector(".cf-silence").onclick = () => carrySilence(c);
     box.appendChild(row);
   }
@@ -316,6 +320,35 @@ async function carryMarkDone(c) {
   if (!(await askConfirm(`Mark “${todo.title}” as done?`, "Mark done"))) return;
   if (!(await setTodoDone(todo, true))) return;
   renderCarryForward(); renderTodos(); toast("Marked done");
+}
+// ---------- snooze a carry-forward task for N days ----------
+let _snoozeTodo = null;
+function openSnooze(c) {
+  _snoozeTodo = c.todo;
+  if (!_snoozeTodo) return;
+  $("#snooze-task").textContent = c.todo.title;
+  $("#snooze-days").value = "";
+  $("#snooze").classList.remove("hidden");
+}
+function closeSnooze() { $("#snooze").classList.add("hidden"); _snoozeTodo = null; }
+async function doSnooze(days) {
+  const todo = _snoozeTodo;
+  if (!todo) return;
+  days = Math.round(Number(days));
+  if (!days || days < 1) return toast("Enter a number of days");
+  const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() + days);
+  const until = localDateStr(d);
+  const backLabel = d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+  const prev = todo.snooze_until || null;
+  const { error } = await sb.from("todos").update({ snooze_until: until }).eq("id", todo.id);
+  if (error) return toast(error.message);
+  todo.snooze_until = until;
+  closeSnooze();
+  renderCarryForward();
+  toastUndo(`Snoozed ${days} day${days > 1 ? "s" : ""} — back ${backLabel}`, async () => {
+    await sb.from("todos").update({ snooze_until: prev }).eq("id", todo.id);
+    todo.snooze_until = prev; renderCarryForward();
+  });
 }
 
 // ---------- start-of-day "due soon" prompt (today + tomorrow) ----------
@@ -1586,6 +1619,10 @@ function bind() {
   $("#prompt-cancel").onclick = () => settlePrompt(null);
   $("#tasklist-close").onclick = closeTaskList;
   $("#habit-close").onclick = closeHabit;
+  $("#snooze-cancel").onclick = closeSnooze;
+  $("#snooze-ok").onclick = () => doSnooze($("#snooze-days").value);
+  $$("#snooze .chip").forEach((c) => (c.onclick = () => doSnooze(c.dataset.days)));
+  $("#snooze-days").addEventListener("keydown", (e) => { if (e.key === "Enter") doSnooze($("#snooze-days").value); });
   $("#prompt-input").addEventListener("keydown", (e) => { if (e.key === "Enter") settlePrompt($("#prompt-input").value); });
   $$(".tab").forEach((t) => (t.onclick = () => showView(t.dataset.view)));
 }
