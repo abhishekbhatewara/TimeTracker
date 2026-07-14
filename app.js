@@ -234,12 +234,22 @@ function carryForwardCandidates() {
   for (const p of past) {
     const key = p.task.trim().toLowerCase();
     if (seen.has(key) || inToday.has(key)) continue;
-    const todo = p.todo_id ? state.todos.find((t) => t.id === p.todo_id) : todoByTitle(p.task);
-    // skip when: no live to-do, done, silenced, or still snoozed (snooze_until in the future)
-    if (!todo || isDoneNow(todo) || todo.carry_silenced) continue;
-    if (todo.snooze_until && todo.snooze_until > today) continue;
+    // Resolve the plan item's to-do. If it was created FROM a to-do that has since
+    // been deleted/archived, honour that deletion and don't carry it. But a plain
+    // planned task that never had a to-do (todo_id null) still carries forward —
+    // it was planned and not finished, which is the whole point of carry-forward.
+    let todo = null;
+    if (p.todo_id) {
+      todo = state.todos.find((t) => t.id === p.todo_id);
+      if (!todo) continue;   // its to-do was deleted → respect that, don't carry
+    } else {
+      todo = todoByTitle(p.task);   // free task may still match a live to-do by name
+    }
+    // Skip only when a backing to-do marks it done, silenced, or still snoozed.
+    if (todo && (isDoneNow(todo) || todo.carry_silenced)) continue;
+    if (todo && todo.snooze_until && todo.snooze_until > today) continue;
     seen.add(key);
-    out.push({ ...p, todo });
+    out.push({ ...p, todo: todo || null });
   }
   return out;
 }
@@ -280,7 +290,7 @@ function renderCarryForward() {
       <button class="iconaction cf-done" title="Mark done">✓</button>
       <button class="iconaction cf-snooze" title="Snooze — hide for a few days, then bring back">💤</button>
       <button class="iconaction cf-silence" title="Silence — stop carrying forward">🔕</button>`;
-    row.querySelector(".cf-edit").onclick = () => openTodoEditor(c.todo);
+    row.querySelector(".cf-edit").onclick = async () => { const t = await carryEnsureTodo(c); if (t) openTodoEditor(t); };
     row.querySelector(".cf-add").onclick = () => carryToToday(c);
     row.querySelector(".cf-done").onclick = () => carryMarkDone(c);
     row.querySelector(".cf-snooze").onclick = () => openSnooze(c);
@@ -312,8 +322,20 @@ async function carryAllToToday() {
   }
   renderPlan(); renderPVA(); renderCarryForward(); toast("Added to today");
 }
+// Managing a carry-forward task (mark done / silence / snooze / reschedule) needs
+// a to-do to hang that state on. Free tasks that never had one get a to-do created
+// lazily the moment the user acts on them — the default flow (view, ＋ add to today)
+// never creates one, so the To-Do list isn't cluttered with one-offs.
+async function carryEnsureTodo(c) {
+  if (c.todo) return c.todo;
+  const todo = await ensureTodo(c.task, c.area_id, c.planned_min, c.persons || [], null);
+  if (!todo) return null;
+  c.todo = todo; c.todo_id = todo.id;
+  if (c.id) await sb.from("plan_items").update({ todo_id: todo.id }).eq("id", c.id);   // link for future loads
+  return todo;
+}
 async function carrySilence(c) {
-  const todo = c.todo;
+  const todo = await carryEnsureTodo(c);
   if (!todo) return;
   const { error } = await sb.from("todos").update({ carry_silenced: true }).eq("id", todo.id);
   if (error) return toast(error.message);
@@ -325,7 +347,7 @@ async function carrySilence(c) {
   });
 }
 async function carryMarkDone(c) {
-  const todo = c.todo;
+  const todo = await carryEnsureTodo(c);
   if (!todo) return;
   if (!(await askConfirm(`Mark “${todo.title}” as done?`, "Mark done"))) return;
   if (!(await setTodoDone(todo, true))) return;
@@ -333,10 +355,11 @@ async function carryMarkDone(c) {
 }
 // ---------- snooze a carry-forward task for N days ----------
 let _snoozeTodo = null;
-function openSnooze(c) {
-  _snoozeTodo = c.todo;
-  if (!_snoozeTodo) return;
-  $("#snooze-task").textContent = c.todo.title;
+async function openSnooze(c) {
+  const todo = await carryEnsureTodo(c);
+  if (!todo) return;
+  _snoozeTodo = todo;
+  $("#snooze-task").textContent = todo.title;
   $("#snooze-days").value = "";
   $("#snooze").classList.remove("hidden");
 }
