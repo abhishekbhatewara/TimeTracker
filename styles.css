@@ -1,4 +1,5 @@
 :root{
+  color-scheme: dark;   /* render form controls (input text, number spinners, native date/time pickers) in dark mode — without this, Safari draws typed input text in the OS light-mode colour, invisible on our dark surfaces */
   --bg:#0f1117; --surface:#181b24; --surface2:#1f2330; --line:#2a2f3d;
   --txt:#f1f3f8; --muted:#a8aec0; --primary:#6366f1; --primary2:#9aa3f7;
   --good:#10b981; --warn:#f59e0b; --bad:#ef4444; --radius:16px;
