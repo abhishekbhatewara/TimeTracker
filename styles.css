@@ -230,6 +230,12 @@ textarea{resize:vertical}
 .subtab{flex:none;background:var(--surface2);border:1px solid var(--line);color:var(--muted);
   border-radius:999px;padding:7px 15px;font-size:.84rem;font-weight:600;cursor:pointer}
 .subtab.active{background:var(--primary);border-color:var(--primary);color:#fff}
+.period-nav{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
+.period-nav h3{margin:0;text-align:center;flex:1;font-size:1rem}
+.pnav{background:var(--surface2);border:1px solid var(--line);color:var(--txt);border-radius:9px;
+  width:38px;height:34px;flex:none;font-size:.9rem;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.pnav:disabled{opacity:.3;cursor:default}
+.pnav:not(:disabled):hover{border-color:var(--primary);color:var(--primary)}
 .day-addblock{margin-top:14px}
 
 /* ---------- quick-add FAB ---------- */

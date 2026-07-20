@@ -23,6 +23,8 @@ const state = {
   todoSort: "category",
   todoSearch: "",
   reportTab: "daily",
+  weekRef: null,        // a date within the week shown in the Week report (null = auto: latest with data)
+  monthRef: null,       // a date within the month shown in the Month report
   collapsedCats: new Set(),
   showDone: false,
   dailyDone: new Set(),  // keys "todoId|YYYY-MM-DD" — per-day completions of Daily tasks
@@ -1233,8 +1235,8 @@ async function deleteFromEditor() {
 function renderReports() {
   renderHeatmap();
   renderDayDetail(state.reportDay || localDateStr(new Date()));
-  $("#week-report").innerHTML = periodSummaryHTML(weekEntries().list, { withAlignment: true });
-  $("#month-report").innerHTML = periodSummaryHTML(monthEntries(), { withAlignment: true });
+  renderWeekReport();
+  renderMonthReport();
   renderAnalysis();
   renderTrendLine();
   applyReportTab();
@@ -1244,11 +1246,62 @@ function applyReportTab() {
   $$("#view-reports .report-pane").forEach((p) => p.classList.toggle("hidden", p.dataset.pane !== state.reportTab));
 }
 
-function monthEntries() {
-  const now = new Date();
-  const from = new Date(now.getFullYear(), now.getMonth(), 1);
-  const to = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+function monthEntries(ref = new Date()) {
+  const from = new Date(ref.getFullYear(), ref.getMonth(), 1);
+  const to = new Date(ref.getFullYear(), ref.getMonth() + 1, 1);
   return entriesInRange(from, to);
+}
+// Most recent completed entry's date — used to auto-jump reports to the latest
+// week/month that actually has logged time (so the pane is never blank when you
+// simply haven't tracked anything in the current calendar period).
+function latestEntryDate() {
+  let latest = null;
+  for (const e of state.entries) {
+    if (!e.ended_at) continue;
+    const s = new Date(e.started_at);
+    if (!latest || s > latest) latest = s;
+  }
+  return latest;
+}
+function renderWeekReport() {
+  if (!state.weekRef) {
+    const hasThis = weekEntries(new Date()).list.some((e) => e.ended_at);
+    state.weekRef = hasThis ? new Date() : (latestEntryDate() || new Date());
+  }
+  const { start, end, list } = weekEntries(state.weekRef);
+  const last = new Date(end); last.setDate(last.getDate() - 1);
+  const isThis = weekStartOf(state.weekRef).getTime() === weekStartOf(new Date()).getTime();
+  const fmt = (d) => d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  $("#week-label").textContent = isThis ? "This week" : `${fmt(start)} – ${fmt(last)}`;
+  $("#week-report").innerHTML = periodSummaryHTML(list, { withAlignment: true });
+  $("#week-next").disabled = weekStartOf(state.weekRef).getTime() >= weekStartOf(new Date()).getTime();
+  $("#week-prev").disabled = false;
+}
+function renderMonthReport() {
+  if (!state.monthRef) {
+    const hasThis = monthEntries(new Date()).some((e) => e.ended_at);
+    state.monthRef = hasThis ? new Date() : (latestEntryDate() || new Date());
+  }
+  const list = monthEntries(state.monthRef);
+  const now = new Date();
+  const isThis = state.monthRef.getFullYear() === now.getFullYear() && state.monthRef.getMonth() === now.getMonth();
+  $("#month-label").textContent = isThis ? "This month" : state.monthRef.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+  $("#month-report").innerHTML = periodSummaryHTML(list, { withAlignment: true });
+  $("#month-next").disabled = state.monthRef.getFullYear() > now.getFullYear() ||
+    (state.monthRef.getFullYear() === now.getFullYear() && state.monthRef.getMonth() >= now.getMonth());
+  $("#month-prev").disabled = false;
+}
+function shiftWeek(delta) {
+  const d = new Date(state.weekRef || new Date()); d.setDate(d.getDate() + delta * 7);
+  if (weekStartOf(d).getTime() > weekStartOf(new Date()).getTime()) return;   // don't page into the future
+  state.weekRef = d; renderWeekReport();
+}
+function shiftMonth(delta) {
+  const r = state.monthRef || new Date();
+  const d = new Date(r.getFullYear(), r.getMonth() + delta, 1);
+  const now = new Date();
+  if (d.getFullYear() > now.getFullYear() || (d.getFullYear() === now.getFullYear() && d.getMonth() > now.getMonth())) return;
+  state.monthRef = d; renderMonthReport();
 }
 
 // Reusable summary block: total, alignment (optional), category bars, top tasks.
@@ -1704,6 +1757,10 @@ function bind() {
   $("#edit-timer").onclick = () => { if (state.running) openEditor(state.running); };
   $("#fab").onclick = quickAddTask;
   $$("#report-subtabs .subtab").forEach((b) => (b.onclick = () => { state.reportTab = b.dataset.pane; applyReportTab(); }));
+  $("#week-prev").onclick = () => shiftWeek(-1);
+  $("#week-next").onclick = () => shiftWeek(1);
+  $("#month-prev").onclick = () => shiftMonth(-1);
+  $("#month-next").onclick = () => shiftMonth(1);
   $("#picker-close").onclick = closePicker;
   $("#picker-confirm").onclick = confirmPicker;
   $("#picker-note").addEventListener("input", onPickerNoteInput);

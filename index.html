@@ -12,7 +12,7 @@
   <meta name="apple-mobile-web-app-title" content="Time Tracker" />
   <link rel="apple-touch-icon" href="icon-180.png" />
   <title>Abhishek's Time Tracker</title>
-  <link rel="stylesheet" href="styles.css?v=35" />
+  <link rel="stylesheet" href="styles.css?v=36" />
 </head>
 <body>
   <!-- ===================== AUTH ===================== -->
@@ -125,11 +125,19 @@
           <div id="day-detail" class="report-detail"></div>
         </div>
         <div class="card report-pane hidden" data-pane="week">
-          <h3>This week</h3>
+          <div class="period-nav">
+            <button id="week-prev" class="pnav" title="Previous week">◀</button>
+            <h3 id="week-label">This week</h3>
+            <button id="week-next" class="pnav" title="Next week">▶</button>
+          </div>
           <div id="week-report"></div>
         </div>
         <div class="card report-pane hidden" data-pane="month">
-          <h3>This month</h3>
+          <div class="period-nav">
+            <button id="month-prev" class="pnav" title="Previous month">◀</button>
+            <h3 id="month-label">This month</h3>
+            <button id="month-next" class="pnav" title="Next month">▶</button>
+          </div>
           <div id="month-report"></div>
         </div>
         <div class="card report-pane hidden" data-pane="analysis">
@@ -373,7 +381,7 @@
 
   <div id="toast" class="toast hidden"></div>
 
-  <script type="module" src="config.js?v=35"></script>
-  <script type="module" src="app.js?v=35"></script>
+  <script type="module" src="config.js?v=36"></script>
+  <script type="module" src="app.js?v=36"></script>
 </body>
 </html>
