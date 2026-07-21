@@ -145,9 +145,10 @@ function toastUndo(msg, undoFn) {
 }
 // Promise-based confirm dialog.
 let _confirmResolve = null;
-function askConfirm(message, okLabel = "Delete") {
+function askConfirm(message, okLabel = "Delete", cancelLabel = "Cancel") {
   $("#confirm-msg").textContent = message;
   $("#confirm-ok").textContent = okLabel;
+  $("#confirm-cancel").textContent = cancelLabel;
   $("#confirm").classList.remove("hidden");
   return new Promise((resolve) => { _confirmResolve = resolve; });
 }
@@ -540,21 +541,33 @@ function planListRow(pi) {
   const isDone = isDoneNow(todo);
   const row = document.createElement("div");
   row.className = "plan-item" + (isDone ? " is-done" : "");
-  const lead = todo
-    ? `<button class="done-toggle${isDone ? " done" : ""}" title="${isDone ? "Mark not done" : "Mark done"}">${isDone ? "✓" : ""}</button><span class="dot" style="background:${a?.color || "#555"}"></span>`
-    : `<span class="dot" style="background:${a?.color || "#555"}"></span>`;
+  // Every planned task gets a complete circle — even free-typed ones with no
+  // to-do yet (a to-do is created on demand when you tick it, via planToggleDone).
   const timeChip = pi.start_min != null ? `<span class="time-chip">🕘 ${minToLabel(pi.start_min)}</span> · ` : "";
-  row.innerHTML = `${lead}
+  row.innerHTML = `<button class="done-toggle${isDone ? " done" : ""}" title="${isDone ? "Mark not done" : "Mark done"}">${isDone ? "✓" : ""}</button>
+    <span class="dot" style="background:${a?.color || "#555"}"></span>
     <div class="body"><div class="title${isDone ? " struck" : ""}">${escapeHtml(pi.task)}</div>
     <div class="sub">${timeChip}${a?.name || "—"} · ${pi.planned_min}m planned${personsOf(pi).length ? ` · <span class="person">👤 ${escapeHtml(personsOf(pi).join(", "))}</span>` : ""}</div></div>
     <button class="iconaction pedit" title="Edit task">✎</button>
     ${isDone ? "" : `<button class="iconaction play" title="Start timer">▶</button>`}
     <button class="iconaction del" title="Remove">✕</button>`;
-  if (todo) row.querySelector(".done-toggle").onclick = () => toggleDone(todo);
+  row.querySelector(".done-toggle").onclick = () => planToggleDone(pi);
   row.querySelector(".pedit").onclick = () => editPlanTask(pi, todo);
   if (!isDone) row.querySelector(".play").onclick = () => startTimer(pi.area_id, pi.task, personsOf(pi));
   row.querySelector(".del").onclick = () => deletePlan(pi.id);
   return row;
+}
+// Mark a planned task complete. Free tasks (no linked to-do) get one created on
+// demand so completion can be recorded, then the normal toggle runs.
+async function planToggleDone(pi) {
+  let todo = pi.todo_id ? state.todos.find((t) => t.id === pi.todo_id) : todoByTitle(pi.task);
+  if (!todo) {
+    todo = await ensureTodo(pi.task, pi.area_id, pi.planned_min, personsOf(pi), null);
+    if (!todo) return;
+    pi.todo_id = todo.id;
+    await sb.from("plan_items").update({ todo_id: todo.id }).eq("id", pi.id);
+  }
+  toggleDone(todo);
 }
 // Schedule view: scheduled tasks in clock order (with a "now" line), then an
 // Unscheduled group. The time control is a native <input type=time> per row —
@@ -595,11 +608,13 @@ function schedRow(pi, overlaps) {
   const row = document.createElement("div");
   row.className = "sched-row" + (isDone ? " is-done" : "") + (overlaps ? " overlaps" : "");
   row.innerHTML = `<input type="time" class="sched-time${scheduled ? " set" : ""}" value="${scheduled ? minToHHMM(pi.start_min) : ""}" title="Set a start time" />
+    <button class="done-toggle${isDone ? " done" : ""}" title="${isDone ? "Mark not done" : "Mark done"}">${isDone ? "✓" : ""}</button>
     <span class="dot" style="background:${a?.color || "#555"}"></span>
     <div class="body"><div class="title${isDone ? " struck" : ""}">${escapeHtml(pi.task)}</div>
     <div class="sub">${a?.name || "—"} · ${rangeLabel}${overlaps ? ` · <span class="warn-txt">overlaps</span>` : ""}</div></div>
     ${isDone ? "" : `<button class="iconaction play" title="Start timer">▶</button>`}
     ${scheduled ? `<button class="iconaction cleartime" title="Unschedule">✕</button>` : ""}`;
+  row.querySelector(".done-toggle").onclick = () => planToggleDone(pi);
   row.querySelector(".sched-time").onchange = (e) => setPlanTime(pi, hhmmToMin(e.target.value));
   if (!isDone) row.querySelector(".play").onclick = () => startTimer(pi.area_id, pi.task, personsOf(pi));
   if (scheduled) row.querySelector(".cleartime").onclick = () => setPlanTime(pi, null);
@@ -731,7 +746,7 @@ async function quickAdd(areaId, note, persons, startISO, endISO) {
 async function maybeAskDone(note) {
   const t = todoByTitle((note || "").trim());
   if (!t || isDoneNow(t)) return;
-  if (await askConfirm(`Logged time on “${t.title}”. Mark it done?`, "Mark done")) {
+  if (await askConfirm(`Logged time on “${t.title}”. Mark it done?`, "Yes", "No")) {
     if (!(await setTodoDone(t, true))) return;
     renderTodos(); toast("Marked done");
   }
