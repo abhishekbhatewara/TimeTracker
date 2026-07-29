@@ -707,10 +707,9 @@ function renderPVA() {
 // ===================================================== entry actions
 async function startTimer(areaId, note, persons = []) {
   if (state.running) { toast("Stop the running timer first"); return; }
-  if (!areaId) { toast("Pick a category"); return; }
   if (!note || !note.trim()) { toast("Add a task name"); return; }
   const { data, error } = await sb.from("entries").insert({
-    user_id: state.user.id, area_id: areaId, note: note.trim(), persons: persons || [],
+    user_id: state.user.id, area_id: areaId || null, note: note.trim(), persons: persons || [],
     started_at: new Date().toISOString(), source: "timer",
   }).select().single();
   if (error) return toast(error.message);
@@ -1177,12 +1176,12 @@ function fmtRange(en) {
   return `${f(new Date(en.started_at))}–${en.ended_at ? f(new Date(en.ended_at)) : "now"}`;
 }
 async function confirmPicker() {
-  if (!state.pick.areaId) return toast("Pick a category");
   const note = $("#picker-note").value.trim();
   if (!note) return toast("Task is required");
   const persons = parsePersons($("#picker-person").value);
+  const areaId = state.pick.areaId || null;   // category is optional — "No category" is fine
   if (state.pick.mode === "timer") {
-    startTimer(state.pick.areaId, note, persons);
+    startTimer(areaId, note, persons);
   } else {
     const date = $("#pk-date").value || localDateStr(new Date());
     const s = new Date(`${date}T${$("#pk-start").value || "00:00"}`);
@@ -1193,7 +1192,7 @@ async function confirmPicker() {
       const a = areaById(ov.area_id);
       if (!(await askConfirm(`Overlaps “${ov.note || a?.name || "another task"}” (${fmtRange(ov)}). Add anyway?`, "Add anyway"))) return;
     }
-    quickAdd(state.pick.areaId, note, persons, s.toISOString(), e.toISOString());
+    quickAdd(areaId, note, persons, s.toISOString(), e.toISOString());
   }
   closePicker();
 }
