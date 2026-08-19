@@ -1012,6 +1012,7 @@ async function saveTodoEditor() {
   if (oldTitle.trim().toLowerCase() !== title.trim().toLowerCase()) {
     await renameTaskEverywhere(oldTitle, title, t.id);   // propagate to plan items + logged entries
   }
+  await syncPlanItemsToTodo(t);   // reflect category (+ duration) edits in the plan
   state.todos.sort((a, b) => a.title.localeCompare(b.title));
   closeTodoEditor(); render(); renderTodos(); refreshOpenReportDay(); toast("Saved");
 }
@@ -1031,6 +1032,26 @@ async function renameTaskEverywhere(oldTitle, newTitle, todoId) {
       await sb.from("entries").update({ note: newTitle }).eq("id", e.id);
       e.note = newTitle;
     }
+  }
+}
+// After editing a task, reflect its category + duration in the linked plan items
+// so "Plan your day" isn't stuck on the values captured when the task was added.
+// Category belongs to the task → sync it on every loaded linked plan item.
+// Planned minutes are per-day → only fill today's items, and only when the task
+// has a real default (so we never wipe a duration the user set on the plan itself).
+async function syncPlanItemsToTodo(t) {
+  const today = localDateStr(new Date());
+  const title = (t.title || "").trim().toLowerCase();
+  for (const p of state.planHistory || []) {
+    const linked = p.todo_id === t.id || (!p.todo_id && (p.task || "").trim().toLowerCase() === title);
+    if (!linked) continue;
+    const patch = {};
+    if (!p.todo_id) patch.todo_id = t.id;
+    if (p.area_id !== t.area_id) patch.area_id = t.area_id;
+    if (t.default_min > 0 && p.date === today && p.planned_min !== t.default_min) patch.planned_min = t.default_min;
+    if (!Object.keys(patch).length) continue;
+    const { error } = await sb.from("plan_items").update(patch).eq("id", p.id);
+    if (!error) Object.assign(p, patch);
   }
 }
 async function deleteFromTodoEditor() {
