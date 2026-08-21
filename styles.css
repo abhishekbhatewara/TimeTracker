@@ -276,6 +276,13 @@ textarea{resize:vertical}
 .recurs{font-size:.85rem;flex:none;color:var(--primary2);opacity:.8;background:none;border:none;cursor:pointer;padding:0 2px}
 .recurs:hover{opacity:1}
 .streak{font-size:.72rem;flex:none;font-weight:700;color:var(--warn);white-space:nowrap}
+.recur-badge{font-size:.68rem;flex:none;color:var(--primary2);background:var(--surface2);border:1px solid var(--line);border-radius:999px;padding:1px 8px;white-space:nowrap}
+/* recurrence pickers */
+.recur-extra{margin:8px 0}
+.weekday-chips{display:flex;gap:6px;flex-wrap:wrap}
+.wd-chip{flex:1 1 auto;min-width:38px;background:var(--surface2);border:1px solid var(--line);color:var(--muted);
+  border-radius:9px;padding:8px 0;font-size:.8rem;font-weight:600;cursor:pointer;text-align:center}
+.wd-chip.on{background:var(--primary);border-color:var(--primary);color:#fff}
 .habit-stats{display:flex;gap:10px;margin:4px 0 14px}
 .hstat{flex:1;text-align:center;background:var(--surface2);border-radius:12px;padding:10px 6px}
 .hstat-n{font-size:1.15rem;font-weight:800}

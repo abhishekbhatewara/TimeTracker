@@ -84,19 +84,72 @@ function weekStartOf(date) {
 const areaById = (id) => state.areas.find((a) => a.id === id);
 const hasTarget = (a) => a.target_pct != null && a.target_pct > 0;
 
-// ----- Recurring "Daily" tasks -----
-// A task whose category is named "Daily" recurs every day: marking it done only
-// counts for the day it was done, then it auto-resets the next day. There's no
-// nightly job — "done-ness" is computed at read time by comparing done_at's
-// local date to today, so the reset is automatic and offline-safe.
-const dailyAreaId = () => state.areas.find((a) => a.name.trim().toLowerCase() === "daily")?.id ?? null;
-const isDailyTodo = (t) => t && t.area_id != null && t.area_id === dailyAreaId();
+// ----- Recurring tasks (Daily / Weekly / Monthly) -----
+// Recurrence is a per-task setting: recur = 'daily' | 'weekly' | 'monthly' (null =
+// one-off). weekly picks weekdays (recur_weekdays, 0=Sun..6=Sat), monthly picks a
+// day of month (recur_dom). Completions live in daily_completions (todo_id, date);
+// a recurring task is "done" for the current occurrence if a completion falls on or
+// after that occurrence's date. There's no nightly job — everything is computed at
+// read time from today's date, so the reset into the next period is automatic.
+const recurOf = (t) => (t && t.recur) ? t.recur : null;
+const isRecurring = (t) => !!recurOf(t);
+const isDailyTodo = (t) => recurOf(t) === "daily";   // the habit/streak view is daily-only
+const WEEKDAY_ABBR = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const startOfDay = (d) => { const x = new Date(d); x.setHours(0, 0, 0, 0); return x; };
+const clampDom = (dom, y, m) => Math.min(dom || 1, new Date(y, m + 1, 0).getDate());
+// The most recent due-date on/before `ref` within the current period, or null if
+// the task isn't due yet this period. Once an occurrence is due it stays the current
+// occurrence until the next one (that's how a missed task "lingers" until done).
+function currentOccurrence(t, ref = new Date()) {
+  const r = recurOf(t); if (!r) return null;
+  const day = startOfDay(ref);
+  if (r === "daily") return day;
+  if (r === "weekly") {
+    const wds = Array.isArray(t.recur_weekdays) ? t.recur_weekdays : [];
+    if (!wds.length) return null;
+    const start = weekStartOf(day);
+    let best = null;
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(start); d.setDate(d.getDate() + i);
+      if (d > day) break;
+      if (wds.includes(d.getDay())) best = d;
+    }
+    return best;   // null until one of its weekdays has arrived this week
+  }
+  if (r === "monthly") {
+    const y = day.getFullYear(), m = day.getMonth();
+    const dom = clampDom(t.recur_dom, y, m);
+    return day.getDate() < dom ? null : new Date(y, m, dom);
+  }
+  return null;
+}
+// Done for the current occurrence? (a completion on/after the occurrence date, up to today)
+function recurringDone(t, ref = new Date()) {
+  const occ = currentOccurrence(t, ref);
+  if (!occ) return false;
+  const day = startOfDay(ref);
+  for (let d = new Date(occ); d <= day; d.setDate(d.getDate() + 1)) {
+    if (state.dailyDone.has(t.id + "|" + localDateStr(d))) return true;
+  }
+  return false;
+}
 // True if this to-do should currently show as done. One-offs: any done_at.
-// Daily tasks: only if there's a completion logged for today (auto-resets daily).
+// Recurring tasks: only if the current occurrence has been completed (auto-resets).
 function isDoneNow(t) {
   if (!t) return false;
-  if (isDailyTodo(t)) return state.dailyDone.has(t.id + "|" + localDateStr(new Date()));
+  if (isRecurring(t)) return recurringDone(t);
   return !!t.done_at;
+}
+// Short human label for a task's recurrence, e.g. "Weekly · Mon, Thu" / "Monthly · 15th".
+function recurLabel(t) {
+  const r = recurOf(t); if (!r) return "";
+  if (r === "daily") return "Daily";
+  if (r === "weekly") {
+    const wds = (Array.isArray(t.recur_weekdays) ? t.recur_weekdays : []).slice().sort((a, b) => a - b);
+    return "Weekly" + (wds.length ? " · " + wds.map((d) => WEEKDAY_ABBR[d]).join(", ") : "");
+  }
+  if (r === "monthly") { const n = t.recur_dom || 1; const s = n % 10, t2 = Math.floor(n % 100 / 10); return "Monthly · " + n + (t2 === 1 ? "th" : s === 1 ? "st" : s === 2 ? "nd" : s === 3 ? "rd" : "th"); }
+  return "";
 }
 const dailyDoneOn = (todoId, d) => state.dailyDone.has(todoId + "|" + localDateStr(d));
 // Current streak: consecutive completed days counting back from today. If today
@@ -399,23 +452,29 @@ function dueSoonCandidates() {
       !inToday.has(td.title.trim().toLowerCase()))
     .sort((a, b) => a.due_date.localeCompare(b.due_date) || a.title.localeCompare(b.title));
 }
-// Tasks in a category named "Daily" — offered every morning (recurring). A task
-// already done today is skipped; yesterday's done state has auto-reset (isDoneNow).
-function dailyCandidates() {
-  const aid = dailyAreaId();
-  if (aid == null) return [];
+// Recurring tasks that are due now and not yet done this occurrence — offered each
+// morning, grouped by type. A task not yet due this period (occurrence null) is
+// skipped; a missed one lingers until done or the period rolls over.
+function recurringCandidates() {
   const inToday = new Set(state.plan.map((p) => p.task.trim().toLowerCase()));
-  return state.todos
-    .filter((t) => t.area_id === aid && !isDoneNow(t) && !inToday.has(t.title.trim().toLowerCase()))
-    .sort((a, b) => a.title.localeCompare(b.title));
+  const out = { daily: [], weekly: [], monthly: [] };
+  for (const t of state.todos) {
+    const r = recurOf(t); if (!r) continue;
+    if (!currentOccurrence(t) || recurringDone(t)) continue;
+    if (inToday.has(t.title.trim().toLowerCase())) continue;
+    out[r].push(t);
+  }
+  for (const k of Object.keys(out)) out[k].sort((a, b) => a.title.localeCompare(b.title));
+  return out;
 }
 function showDueAsk() {
   const today = localDateStr(new Date());
   const key = "ta-dueask-" + state.user.id;
   if (localStorage.getItem(key) === today) return;   // already prompted today
-  const daily = dailyCandidates();
-  const due = dueSoonCandidates().filter((t) => !daily.some((d) => d.id === t.id));
-  if (!daily.length && !due.length) return;
+  const rec = recurringCandidates();
+  const recIds = new Set([...rec.daily, ...rec.weekly, ...rec.monthly].map((t) => t.id));
+  const due = dueSoonCandidates().filter((t) => !recIds.has(t.id));
+  if (!recIds.size && !due.length) return;
   const box = $("#dueask-list"); box.innerHTML = "";
   const addGroup = (label, items, badgeFn) => {
     if (!items.length) return;
@@ -431,7 +490,9 @@ function showDueAsk() {
       box.appendChild(row);
     }
   };
-  addGroup("Daily", daily, null);
+  addGroup("Daily", rec.daily, null);
+  addGroup("This week", rec.weekly, (td) => `<span class="due-badge">${escapeHtml(recurLabel(td))}</span>`);
+  addGroup("This month", rec.monthly, (td) => `<span class="due-badge">${escapeHtml(recurLabel(td))}</span>`);
   addGroup("Due soon", due, (td) => { const d = dueLabel(td.due_date); return `<span class="due-badge ${d.cls}">${d.text}</span>`; });
   $("#dueask").classList.remove("hidden");
 }
@@ -777,17 +838,65 @@ const todoByTitle = (title) =>
 const inTodayPlan = (title) =>
   state.plan.some((p) => p.task.trim().toLowerCase() === title.trim().toLowerCase());
 
-async function ensureTodo(title, areaId, min, persons = [], due = null) {
+async function ensureTodo(title, areaId, min, persons = [], due = null, recur = null) {
   const existing = todoByTitle(title);
   if (existing) return existing;
-  const { data, error } = await sb.from("todos").insert({
+  const row = {
     user_id: state.user.id, title: title.trim(), area_id: areaId || null,
     default_min: min || 0, persons: persons || [], due_date: due || null,
-  }).select().single();
+  };
+  if (recur && recur.recur) {
+    row.recur = recur.recur;
+    row.recur_weekdays = recur.recur_weekdays || null;
+    row.recur_dom = recur.recur_dom || null;
+  }
+  const { data, error } = await sb.from("todos").insert(row).select().single();
   if (error) { toast(error.message); return null; }
   state.todos.push(data);
   state.todos.sort((a, b) => a.title.localeCompare(b.title));
   return data;
+}
+// ---------- recurrence form controls (shared by the add form + the editor) ----------
+const DOW_LABELS = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
+const ADD_RECUR = { recur: "todo-recur", weekly: "todo-weekly", monthly: "todo-monthly", weekdays: "todo-weekdays", dom: "todo-dom" };
+const EDIT_RECUR = { recur: "te-recur", weekly: "te-weekly", monthly: "te-monthly", weekdays: "te-weekdays", dom: "te-dom" };
+function buildWeekdayChips(container, selected = []) {
+  container.innerHTML = "";
+  for (let i = 0; i < 7; i++) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "wd-chip" + (selected.includes(i) ? " on" : "");
+    b.dataset.wd = i; b.textContent = DOW_LABELS[i];
+    b.onclick = () => b.classList.toggle("on");
+    container.appendChild(b);
+  }
+}
+function toggleRecurExtras(ids) {
+  const v = $("#" + ids.recur).value;
+  $("#" + ids.weekly).classList.toggle("hidden", v !== "weekly");
+  $("#" + ids.monthly).classList.toggle("hidden", v !== "monthly");
+}
+function setRecurControls(ids, t) {
+  $("#" + ids.recur).value = t?.recur || "";
+  buildWeekdayChips($("#" + ids.weekdays), t && Array.isArray(t.recur_weekdays) ? t.recur_weekdays : []);
+  $("#" + ids.dom).value = t?.recur_dom || "";
+  toggleRecurExtras(ids);
+}
+// Read + validate the recurrence controls. Returns {recur,...} or false if invalid.
+function readRecurControls(ids) {
+  const recur = $("#" + ids.recur).value || null;
+  if (!recur) return { recur: null, recur_weekdays: null, recur_dom: null };
+  if (recur === "weekly") {
+    const wds = [...document.querySelectorAll("#" + ids.weekdays + " .wd-chip.on")].map((b) => Number(b.dataset.wd)).sort((a, b) => a - b);
+    if (!wds.length) { toast("Pick at least one weekday"); return false; }
+    return { recur, recur_weekdays: wds, recur_dom: null };
+  }
+  if (recur === "monthly") {
+    const dom = Number($("#" + ids.dom).value);
+    if (!dom || dom < 1 || dom > 31) { toast("Enter a day of month (1–31)"); return false; }
+    return { recur, recur_weekdays: null, recur_dom: dom };
+  }
+  return { recur: "daily", recur_weekdays: null, recur_dom: null };
 }
 
 // Narrow the task suggestions to the chosen category, so picking from a long
@@ -946,13 +1055,15 @@ function todoRowEl(t) {
   const ppl = personsOf(t);
   const isDone = isDoneNow(t);
   const daily = isDailyTodo(t);
+  const recurring = isRecurring(t);
   const streak = daily ? dailyStreak(t.id) : 0;
   const row = document.createElement("div");
   row.className = "todo-row" + (isDone ? " is-done" : "");
   row.innerHTML = `<button class="done-toggle${isDone ? " done" : ""}" title="${isDone ? "Mark not done" : "Mark done"}">${isDone ? "✓" : ""}</button>
     <span class="dot" style="background:${a?.color || "#555"}"></span>
     <span class="todo-title${isDone ? " struck" : ""}">${escapeHtml(t.title)}</span>
-    ${daily ? `<button class="recurs" title="Recurring daily — tap for streak & history">↻</button>` : ""}
+    ${daily ? `<button class="recurs" title="Recurring daily — tap for streak & history">↻</button>`
+      : recurring ? `<span class="recur-badge" title="Repeats ${escapeAttr(recurLabel(t))}">↻ ${escapeHtml(recurLabel(t))}</span>` : ""}
     ${streak > 0 ? `<span class="streak" title="${streak}-day streak — tap ↻ for history">🔥 ${streak}</span>` : ""}
     ${ppl.length ? `<span class="mini-person" title="${escapeAttr(ppl.join(", "))}">👤</span>` : ""}
     ${due && !isDone ? `<span class="due-badge ${due.cls} mini">${due.text}</span>` : ""}
@@ -973,13 +1084,16 @@ async function addTodo() {
   const title = $("#todo-new").value.trim();
   if (!title) return toast("Enter a task");
   if (todoByTitle(title)) { $("#todo-new").value = ""; return toast("Already on your list"); }
+  const recur = readRecurControls(ADD_RECUR);
+  if (recur === false) return;   // invalid recurrence (message already shown)
   const persons = parsePersons($("#todo-person").value);
   const due = $("#todo-due").value || null;
-  const t = await ensureTodo(title, $("#todo-area").value, Number($("#todo-min").value) || 0, persons, due);
+  const t = await ensureTodo(title, $("#todo-area").value, Number($("#todo-min").value) || 0, persons, due, recur);
   if (!t) return;
   $("#todo-new").value = ""; $("#todo-min").value = ""; $("#todo-person").value = ""; $("#todo-due").value = "";
+  setRecurControls(ADD_RECUR, null);   // reset the repeat picker
   renderTodos(); renderPlan();
-  toast(`“${t.title}” added to your to-do list`);
+  toast(`“${t.title}” added${recur.recur ? " · " + recurLabel(t) : ""}`);
 }
 // ---------- to-do editor ----------
 function openTodoEditor(t) {
@@ -989,6 +1103,7 @@ function openTodoEditor(t) {
   $("#te-person").value = personsOf(t).join(", ");
   $("#te-due").value = t.due_date || "";
   $("#te-min").value = t.default_min || "";
+  setRecurControls(EDIT_RECUR, t);
   $("#te-carry").checked = !t.carry_silenced;
   $("#todoedit").classList.remove("hidden");
 }
@@ -1000,10 +1115,13 @@ async function saveTodoEditor() {
   if (!title) return toast("Task name required");
   const clash = state.todos.find((x) => x.id !== t.id && x.title.trim().toLowerCase() === title.toLowerCase());
   if (clash) return toast("Another task already has that name");
+  const recur = readRecurControls(EDIT_RECUR);
+  if (recur === false) return;   // invalid recurrence (message already shown)
   const payload = {
     title, area_id: $("#te-area").value || null,
     persons: parsePersons($("#te-person").value), default_min: Number($("#te-min").value) || 0,
     due_date: $("#te-due").value || null, carry_silenced: !$("#te-carry").checked,
+    recur: recur.recur, recur_weekdays: recur.recur_weekdays, recur_dom: recur.recur_dom,
   };
   const oldTitle = t.title;
   const { data, error } = await sb.from("todos").update(payload).eq("id", t.id).select().single();
@@ -1072,22 +1190,27 @@ async function addTodoToPlan(t) {
   state.plan.push(data);
   renderPlan(); renderPVA(); renderTodos(); toast("Added to today's plan");
 }
-// Set a to-do's done state. Daily tasks write a per-day completion row (so the
-// done-ness is scoped to today and history is kept for streaks); one-offs use
-// todos.done_at. Returns true on success.
+// Set a to-do's done state. Recurring tasks write a completion row for today (so
+// done-ness is scoped to the current occurrence and history is kept for streaks);
+// undoing removes completions from the current occurrence through today, leaving
+// earlier occurrences intact. One-offs use todos.done_at. Returns true on success.
 async function setTodoDone(todo, makeDone) {
-  if (isDailyTodo(todo)) {
-    const date = localDateStr(new Date());
-    const key = todo.id + "|" + date;
+  if (isRecurring(todo)) {
+    const today = localDateStr(new Date());
     if (makeDone) {
       const { error } = await sb.from("daily_completions")
-        .upsert({ user_id: state.user.id, todo_id: todo.id, date }, { onConflict: "todo_id,date" });
+        .upsert({ user_id: state.user.id, todo_id: todo.id, date: today }, { onConflict: "todo_id,date" });
       if (error) { toast(error.message); return false; }
-      state.dailyDone.add(key);
+      state.dailyDone.add(todo.id + "|" + today);
     } else {
-      const { error } = await sb.from("daily_completions").delete().eq("todo_id", todo.id).eq("date", date);
-      if (error) { toast(error.message); return false; }
-      state.dailyDone.delete(key);
+      const occ = currentOccurrence(todo) || startOfDay(new Date());
+      const dates = [];
+      for (let d = new Date(occ); localDateStr(d) <= today; d.setDate(d.getDate() + 1)) dates.push(localDateStr(d));
+      if (dates.length) {
+        const { error } = await sb.from("daily_completions").delete().eq("todo_id", todo.id).in("date", dates);
+        if (error) { toast(error.message); return false; }
+        dates.forEach((x) => state.dailyDone.delete(todo.id + "|" + x));
+      }
     }
   } else {
     const newVal = makeDone ? new Date().toISOString() : null;
@@ -1808,6 +1931,10 @@ function bind() {
   $("#plan-task").addEventListener("keydown", (e) => { if (e.key === "Enter") addPlanItem(); });
   $("#todo-add").onclick = addTodo;
   $("#todo-new").addEventListener("keydown", (e) => { if (e.key === "Enter") addTodo(); });
+  // recurrence pickers (add form + editor): show weekday/day-of-month extras on change
+  buildWeekdayChips($("#todo-weekdays"));
+  $("#todo-recur").addEventListener("change", () => toggleRecurExtras(ADD_RECUR));
+  $("#te-recur").addEventListener("change", () => toggleRecurExtras(EDIT_RECUR));
   $("#todo-person").addEventListener("keydown", (e) => { if (e.key === "Enter") addTodo(); });
   $("#todo-filter-person").addEventListener("change", (e) => { state.personFilter = e.target.value; renderTodos(); });
   $("#todo-search").addEventListener("input", (e) => { state.todoSearch = e.target.value; renderTodos(); });

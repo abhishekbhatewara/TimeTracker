@@ -12,7 +12,7 @@
   <meta name="apple-mobile-web-app-title" content="Time Tracker" />
   <link rel="apple-touch-icon" href="icon-180.png" />
   <title>Abhishek's Time Tracker</title>
-  <link rel="stylesheet" href="styles.css?v=39" />
+  <link rel="stylesheet" href="styles.css?v=40" />
 </head>
 <body>
   <!-- ===================== AUTH ===================== -->
@@ -182,6 +182,20 @@
               <input id="todo-person" list="person-options" placeholder="People — comma separated (optional)" />
               <input id="todo-due" type="date" class="plan-due" title="Deadline (optional)" />
             </div>
+            <div class="plan-form-row">
+              <select id="todo-recur" class="plan-area" title="Repeat this task">
+                <option value="">Doesn't repeat</option>
+                <option value="daily">Repeats daily</option>
+                <option value="weekly">Repeats weekly</option>
+                <option value="monthly">Repeats monthly</option>
+              </select>
+            </div>
+            <div id="todo-weekly" class="recur-extra hidden">
+              <div class="weekday-chips" id="todo-weekdays"></div>
+            </div>
+            <div id="todo-monthly" class="recur-extra hidden">
+              <input id="todo-dom" type="number" min="1" max="31" placeholder="Day of month (e.g. 15)" />
+            </div>
             <button id="todo-add" class="btn primary block">Add task</button>
           </div>
           <datalist id="person-options"></datalist>
@@ -275,6 +289,21 @@
       <input id="te-due" type="date" />
       <label class="pk-label">Default minutes</label>
       <input id="te-min" type="number" min="0" step="5" placeholder="0" />
+      <label class="pk-label">Repeats</label>
+      <select id="te-recur">
+        <option value="">Doesn't repeat</option>
+        <option value="daily">Daily</option>
+        <option value="weekly">Weekly</option>
+        <option value="monthly">Monthly</option>
+      </select>
+      <div id="te-weekly" class="recur-extra hidden">
+        <label class="pk-label">On which days</label>
+        <div class="weekday-chips" id="te-weekdays"></div>
+      </div>
+      <div id="te-monthly" class="recur-extra hidden">
+        <label class="pk-label">Day of month</label>
+        <input id="te-dom" type="number" min="1" max="31" placeholder="e.g. 15" />
+      </div>
       <label class="te-check"><input type="checkbox" id="te-carry" checked /> Carry forward if unfinished</label>
       <button id="todoedit-save" class="btn primary block">Save</button>
       <button id="todoedit-delete" class="btn ghost block">Delete task</button>
@@ -381,7 +410,7 @@
 
   <div id="toast" class="toast hidden"></div>
 
-  <script type="module" src="config.js?v=39"></script>
-  <script type="module" src="app.js?v=39"></script>
+  <script type="module" src="config.js?v=40"></script>
+  <script type="module" src="app.js?v=40"></script>
 </body>
 </html>
