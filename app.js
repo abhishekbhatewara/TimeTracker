@@ -26,6 +26,7 @@ const state = {
   weekRef: null,        // a date within the week shown in the Week report (null = auto: latest with data)
   monthRef: null,       // a date within the month shown in the Month report
   allEntries: null,     // every completed entry, loaded lazily for the All-time dashboard
+  atFrom: null, atTo: null,   // All-time dashboard date-range filter (YYYY-MM-DD or null)
   collapsedCats: new Set(),
   showDone: false,
   dailyDone: new Set(),  // keys "todoId|YYYY-MM-DD" — per-day completions of Daily tasks
@@ -1671,12 +1672,22 @@ function monthlyColumnsHTML(byMonth) {
   return `<div class="alltime-scroll"><svg viewBox="0 0 ${W} ${H}" style="height:170px;width:${W}px;max-width:none">
     <line x1="${pad}" y1="${base}" x2="${W - pad}" y2="${base}" stroke="var(--line)"/>${bars}</svg></div>`;
 }
+// Completed entries within the dashboard's current date-range filter (all if none).
+function filteredAllTimeEntries() {
+  return (state.allEntries || []).filter((e) => {
+    if (!e.ended_at || minutesOf(e) <= 0) return false;
+    const d = localDateStr(new Date(e.started_at));
+    if (state.atFrom && d < state.atFrom) return false;
+    if (state.atTo && d > state.atTo) return false;
+    return true;
+  });
+}
 async function renderAllTime() {
   const box = $("#alltime");
   box.innerHTML = `<div class="muted small">Loading your history…</div>`;
-  const all = await loadAllEntries();
-  const done = all.filter((e) => e.ended_at && minutesOf(e) > 0);
-  if (!done.length) { box.innerHTML = `<div class="empty">No time logged yet. Track some time and it'll show up here.</div>`; return; }
+  await loadAllEntries();
+  const done = filteredAllTimeEntries();
+  if (!done.length) { box.innerHTML = `<div class="empty">No time logged in this range.</div>`; return; }
   let total = 0, first = null, last = null;
   const byArea = new Map(), byTask = new Map(), byPerson = new Map(), byMonth = new Map(), byDow = [0, 0, 0, 0, 0, 0, 0];
   const days = new Set();
@@ -1697,7 +1708,10 @@ async function renderAllTime() {
   const nDays = days.size;
   const heroHrs = total / 60;
   const heroTxt = heroHrs >= 100 ? Math.round(heroHrs) + "h" : fmtDur(total);
-  const sinceTxt = first.toLocaleDateString(undefined, { month: "short", year: "numeric" });
+  const fmtD = (s) => new Date(s + "T00:00").toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+  const sinceTxt = (state.atFrom || state.atTo)
+    ? "tracked " + (state.atFrom ? fmtD(state.atFrom) : "start") + " – " + (state.atTo ? fmtD(state.atTo) : "today")
+    : "tracked since " + first.toLocaleDateString(undefined, { month: "short", year: "numeric" });
   const tile = (n, l) => `<div class="at-tile"><div class="at-n">${n}</div><div class="at-l">${l}</div></div>`;
   const catRows = [...byArea.entries()].map(([id, m]) => ({ label: areaById(id)?.name || "No category", m, color: areaById(id)?.color || "#777" }))
     .filter((r) => Math.round(r.m) >= 1).sort((a, b) => b.m - a.m);
@@ -1708,7 +1722,7 @@ async function renderAllTime() {
   const dowHTML = `<div class="at-dow">` + byDow.map((m, i) =>
     `<div class="at-dow-col"><div class="at-dow-bar" style="height:${Math.max(3, m / dowMax * 60)}px" title="${fmtDur(m)}"></div><span>${DOW[i][0]}</span></div>`).join("") + `</div>`;
 
-  let html = `<div class="at-hero"><div class="at-hero-n">${heroTxt}</div><div class="at-hero-l">tracked since ${sinceTxt}</div></div>`;
+  let html = `<div class="at-hero"><div class="at-hero-n">${heroTxt}</div><div class="at-hero-l">${sinceTxt}</div></div>`;
   html += `<div class="at-tiles">${tile(nDays, "days tracked")}${tile(byTask.size, "distinct tasks")}${tile(fmtDur(total / nDays), "avg / active day")}</div>`;
   html += `<div class="rep-sub">Time by category, all-time</div>` + rankBarsHTML(catRows, total);
   html += `<div class="rep-sub">By month, hours</div>` + monthlyColumnsHTML(byMonth);
@@ -1717,6 +1731,40 @@ async function renderAllTime() {
   if (personRows.length) html += `<div class="rep-sub">Who you spent time with</div>` + rankBarsHTML(personRows, total);
   html += `<div class="rep-sub">By day of week</div>${dowHTML}`;
   box.innerHTML = html;
+}
+// Date-range presets for the dashboard.
+function applyAtPreset(range) {
+  const today = new Date();
+  if (range === "all") { state.atFrom = null; state.atTo = null; }
+  else if (range === "ytd") { state.atFrom = localDateStr(new Date(today.getFullYear(), 0, 1)); state.atTo = localDateStr(today); }
+  else { const n = Number(range); const f = new Date(today); f.setDate(f.getDate() - (n - 1)); state.atFrom = localDateStr(f); state.atTo = localDateStr(today); }
+  $("#at-from").value = state.atFrom || ""; $("#at-to").value = state.atTo || "";
+  $$("#at-presets .at-preset").forEach((b) => b.classList.toggle("on", b.dataset.range === range));
+  renderAllTime();
+}
+// Clear the preset highlight when a custom date is picked.
+function clearAtPresetHighlight() { $$("#at-presets .at-preset").forEach((b) => b.classList.remove("on")); }
+// Download the currently-filtered entries as a CSV (one row per logged block).
+function exportAllTimeCSV() {
+  const rows = filteredAllTimeEntries().slice().sort((a, b) => new Date(a.started_at) - new Date(b.started_at));
+  if (!rows.length) return toast("Nothing to export in this range");
+  const esc = (v) => { v = String(v == null ? "" : v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
+  const hhmm = (d) => d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  const header = ["Date", "Start", "End", "Minutes", "Duration", "Task", "Category", "People"];
+  const lines = [header.join(",")];
+  for (const e of rows) {
+    const s = new Date(e.started_at), en = new Date(e.ended_at), mins = Math.round(minutesOf(e));
+    lines.push([localDateStr(s), hhmm(s), hhmm(en), mins, fmtDur(mins),
+      e.note || "", areaById(e.area_id)?.name || "No category", personsOf(e).join("; ")].map(esc).join(","));
+  }
+  const blob = new Blob(["﻿" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `time-tracker_${state.atFrom || "start"}_to_${state.atTo || localDateStr(new Date())}.csv`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+  toast(`Exported ${rows.length} entr${rows.length === 1 ? "y" : "ies"}`);
 }
 function renderHeatmap() {
   const box = $("#heatmap");
@@ -2012,6 +2060,10 @@ function bind() {
   $("#edit-timer").onclick = () => { if (state.running) openEditor(state.running); };
   $("#fab").onclick = quickAddTask;
   $$("#report-subtabs .subtab").forEach((b) => (b.onclick = () => { state.reportTab = b.dataset.pane; if (b.dataset.pane === "alltime") renderAllTime(); applyReportTab(); }));
+  $$("#at-presets .at-preset").forEach((b) => (b.onclick = () => applyAtPreset(b.dataset.range)));
+  $("#at-from").addEventListener("change", (e) => { state.atFrom = e.target.value || null; clearAtPresetHighlight(); renderAllTime(); });
+  $("#at-to").addEventListener("change", (e) => { state.atTo = e.target.value || null; clearAtPresetHighlight(); renderAllTime(); });
+  $("#at-export").onclick = exportAllTimeCSV;
   $("#week-prev").onclick = () => shiftWeek(-1);
   $("#week-next").onclick = () => shiftWeek(1);
   $("#month-prev").onclick = () => shiftMonth(-1);

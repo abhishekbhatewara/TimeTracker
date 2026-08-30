@@ -298,6 +298,13 @@ textarea{resize:vertical}
 .rep-dayhead{font-weight:700;margin-bottom:8px}
 .rep-total{font-size:1.15rem;font-weight:800;margin-bottom:8px}
 /* ---------- all-time dashboard ---------- */
+.at-controls{display:flex;flex-direction:column;gap:8px;margin:2px 0 12px}
+.at-presets{display:flex;gap:6px;flex-wrap:wrap}
+.at-preset{cursor:pointer;font-weight:600}
+.at-preset.on{background:var(--primary);border-color:var(--primary);color:#fff}
+.at-range{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.at-range input[type=date]{background:var(--surface2);border:1px solid var(--line);color:var(--txt);border-radius:9px;padding:7px 8px;font-size:.82rem;flex:1 1 120px;min-width:0}
+.at-range #at-export{flex:none;margin-left:auto}
 .at-hero{text-align:center;padding:8px 0 4px}
 .at-hero-n{font-family:Georgia,"Times New Roman",serif;font-size:2.6rem;font-weight:700;line-height:1;color:var(--txt);font-variant-numeric:tabular-nums}
 .at-hero-l{font-size:.8rem;color:var(--muted);margin-top:4px}
