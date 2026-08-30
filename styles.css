@@ -297,6 +297,19 @@ textarea{resize:vertical}
 .report-detail{margin-top:14px;border-top:1px solid var(--line);padding-top:12px}
 .rep-dayhead{font-weight:700;margin-bottom:8px}
 .rep-total{font-size:1.15rem;font-weight:800;margin-bottom:8px}
+/* ---------- all-time dashboard ---------- */
+.at-hero{text-align:center;padding:8px 0 4px}
+.at-hero-n{font-family:Georgia,"Times New Roman",serif;font-size:2.6rem;font-weight:700;line-height:1;color:var(--txt);font-variant-numeric:tabular-nums}
+.at-hero-l{font-size:.8rem;color:var(--muted);margin-top:4px}
+.at-tiles{display:flex;gap:8px;margin:14px 0 6px}
+.at-tile{flex:1;background:var(--surface2);border:1px solid var(--line);border-radius:12px;padding:10px 6px;text-align:center}
+.at-tile .at-n{font-size:1.05rem;font-weight:800;font-variant-numeric:tabular-nums}
+.at-tile .at-l{font-size:.66rem;color:var(--muted);margin-top:2px;line-height:1.2}
+.alltime-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;margin:2px -4px 4px}
+.at-dow{display:flex;align-items:flex-end;gap:8px;height:76px;padding:0 4px}
+.at-dow-col{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:4px}
+.at-dow-bar{width:100%;max-width:26px;background:var(--primary2);border-radius:4px 4px 0 0}
+.at-dow-col span{font-size:.66rem;color:var(--muted)}
 .rep-bars{display:flex;flex-direction:column;gap:9px;margin:6px 0 4px}
 .repbar-top{display:flex;justify-content:space-between;font-size:.85rem;margin-bottom:4px}
 .repbar-top .dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:7px}

@@ -12,7 +12,7 @@
   <meta name="apple-mobile-web-app-title" content="Time Tracker" />
   <link rel="apple-touch-icon" href="icon-180.png" />
   <title>Abhishek's Time Tracker</title>
-  <link rel="stylesheet" href="styles.css?v=40" />
+  <link rel="stylesheet" href="styles.css?v=41" />
 </head>
 <body>
   <!-- ===================== AUTH ===================== -->
@@ -118,6 +118,7 @@
           <button class="subtab" data-pane="month">Month</button>
           <button class="subtab" data-pane="analysis">Analysis</button>
           <button class="subtab" data-pane="trend">Trend</button>
+          <button class="subtab" data-pane="alltime">All-time</button>
         </div>
         <div class="card report-pane" data-pane="daily">
           <h3>Daily <span class="muted small">— tap a day</span></h3>
@@ -147,6 +148,10 @@
         <div class="card report-pane hidden" data-pane="trend">
           <h3>Weekly alignment trend</h3>
           <div id="trend-line"></div>
+        </div>
+        <div class="card report-pane hidden" data-pane="alltime">
+          <h3>All-time <span class="muted small">— everything you've logged</span></h3>
+          <div id="alltime"></div>
         </div>
       </section>
 
@@ -410,7 +415,7 @@
 
   <div id="toast" class="toast hidden"></div>
 
-  <script type="module" src="config.js?v=40"></script>
-  <script type="module" src="app.js?v=40"></script>
+  <script type="module" src="config.js?v=41"></script>
+  <script type="module" src="app.js?v=41"></script>
 </body>
 </html>

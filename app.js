@@ -25,6 +25,7 @@ const state = {
   reportTab: "daily",
   weekRef: null,        // a date within the week shown in the Week report (null = auto: latest with data)
   monthRef: null,       // a date within the month shown in the Month report
+  allEntries: null,     // every completed entry, loaded lazily for the All-time dashboard
   collapsedCats: new Set(),
   showDone: false,
   dailyDone: new Set(),  // keys "todoId|YYYY-MM-DD" — per-day completions of Daily tasks
@@ -1621,6 +1622,102 @@ function renderTrendLine() {
     <text x="${p}" y="${H - 1}" font-size="8" fill="var(--muted)">8 wks ago</text>
     <text x="${W - p}" y="${H - 1}" font-size="8" fill="var(--muted)" text-anchor="end">this wk</text></svg>`;
 }
+// ===================================================== ALL-TIME DASHBOARD
+// Loads every completed entry once (the normal load only keeps the last 84 days).
+async function loadAllEntries() {
+  if (state.allEntries) return state.allEntries;
+  const { data, error } = await sb.from("entries").select("*")
+    .not("ended_at", "is", null).order("started_at");
+  if (error) { toast(error.message); return []; }
+  state.allEntries = data || [];
+  return state.allEntries;
+}
+// Ranked horizontal bars (app idiom + McKinsey grammar: values on the marks, sorted desc).
+function rankBarsHTML(rows, total, colorFor) {
+  if (!rows.length) return "";
+  const max = rows[0].m;
+  let h = `<div class="rep-bars">`;
+  for (const { label, m, color } of rows) {
+    const c = color || (colorFor ? colorFor(label) : "var(--primary)");
+    h += `<div class="repbar"><div class="repbar-top">
+      <span><span class="dot" style="background:${c}"></span>${escapeHtml(label)}</span>
+      <span class="muted">${fmtDur(m)}${total ? " · " + Math.round(m / total * 100) + "%" : ""}</span></div>
+      <div class="track"><div class="fill" style="width:${Math.max(2, m / max * 100)}%;background:${c}"></div></div></div>`;
+  }
+  return h + `</div>`;
+}
+// Vertical column chart of hours per month, chronological, values on the columns.
+function monthlyColumnsHTML(byMonth) {
+  const keys = [...byMonth.keys()].sort();
+  if (!keys.length) return "";
+  const maxMin = Math.max(...keys.map((k) => byMonth.get(k)));
+  const W = Math.max(300, keys.length * 46), H = 170, pad = 22, base = H - 26, top = 12;
+  const bw = Math.min(30, (W - 2 * pad) / keys.length * 0.62);
+  let bars = "";
+  keys.forEach((k, i) => {
+    const min = byMonth.get(k);
+    const x = pad + (i + 0.5) * (W - 2 * pad) / keys.length;
+    const hgt = Math.max(2, (min / maxMin) * (base - top));
+    const y = base - hgt;
+    const [yy, mm] = k.split("-");
+    const mlabel = new Date(yy, mm - 1, 1).toLocaleDateString(undefined, { month: "short" });
+    const hrs = min / 60;
+    const vlabel = hrs >= 10 ? Math.round(hrs) + "h" : hrs.toFixed(1) + "h";
+    bars += `<rect x="${(x - bw / 2).toFixed(1)}" y="${y.toFixed(1)}" width="${bw.toFixed(1)}" height="${hgt.toFixed(1)}" rx="3" fill="var(--primary)"/>
+      <text x="${x.toFixed(1)}" y="${(y - 4).toFixed(1)}" font-size="9" fill="var(--muted)" text-anchor="middle" style="font-variant-numeric:tabular-nums">${vlabel}</text>
+      <text x="${x.toFixed(1)}" y="${base + 12}" font-size="9" fill="var(--muted)" text-anchor="middle">${mlabel}</text>
+      ${(i === 0 || mm === "01") ? `<text x="${x.toFixed(1)}" y="${base + 22}" font-size="8" fill="var(--muted)" text-anchor="middle">${yy}</text>` : ""}`;
+  });
+  return `<div class="alltime-scroll"><svg viewBox="0 0 ${W} ${H}" style="height:170px;width:${W}px;max-width:none">
+    <line x1="${pad}" y1="${base}" x2="${W - pad}" y2="${base}" stroke="var(--line)"/>${bars}</svg></div>`;
+}
+async function renderAllTime() {
+  const box = $("#alltime");
+  box.innerHTML = `<div class="muted small">Loading your history…</div>`;
+  const all = await loadAllEntries();
+  const done = all.filter((e) => e.ended_at && minutesOf(e) > 0);
+  if (!done.length) { box.innerHTML = `<div class="empty">No time logged yet. Track some time and it'll show up here.</div>`; return; }
+  let total = 0, first = null, last = null;
+  const byArea = new Map(), byTask = new Map(), byPerson = new Map(), byMonth = new Map(), byDow = [0, 0, 0, 0, 0, 0, 0];
+  const days = new Set();
+  for (const e of done) {
+    const m = minutesOf(e); total += m;
+    const s = new Date(e.started_at);
+    if (!first || s < first) first = s;
+    if (!last || s > last) last = s;
+    days.add(localDateStr(s));
+    const ak = areaById(e.area_id) ? e.area_id : "__none__";
+    byArea.set(ak, (byArea.get(ak) || 0) + m);
+    const k = (e.note || "").trim() || "(untitled)";
+    byTask.set(k, (byTask.get(k) || 0) + m);
+    for (const p of personsOf(e)) byPerson.set(p, (byPerson.get(p) || 0) + m);
+    byMonth.set(s.getFullYear() + "-" + pad(s.getMonth() + 1), (byMonth.get(s.getFullYear() + "-" + pad(s.getMonth() + 1)) || 0) + m);
+    byDow[s.getDay()] += m;
+  }
+  const nDays = days.size;
+  const heroHrs = total / 60;
+  const heroTxt = heroHrs >= 100 ? Math.round(heroHrs) + "h" : fmtDur(total);
+  const sinceTxt = first.toLocaleDateString(undefined, { month: "short", year: "numeric" });
+  const tile = (n, l) => `<div class="at-tile"><div class="at-n">${n}</div><div class="at-l">${l}</div></div>`;
+  const catRows = [...byArea.entries()].map(([id, m]) => ({ label: areaById(id)?.name || "No category", m, color: areaById(id)?.color || "#777" }))
+    .filter((r) => Math.round(r.m) >= 1).sort((a, b) => b.m - a.m);
+  const taskRows = [...byTask.entries()].map(([label, m]) => ({ label, m })).sort((a, b) => b.m - a.m).slice(0, 10);
+  const personRows = [...byPerson.entries()].map(([label, m]) => ({ label, m, color: "var(--primary2)" })).sort((a, b) => b.m - a.m).slice(0, 10);
+  const dowMax = Math.max(...byDow) || 1;
+  const DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const dowHTML = `<div class="at-dow">` + byDow.map((m, i) =>
+    `<div class="at-dow-col"><div class="at-dow-bar" style="height:${Math.max(3, m / dowMax * 60)}px" title="${fmtDur(m)}"></div><span>${DOW[i][0]}</span></div>`).join("") + `</div>`;
+
+  let html = `<div class="at-hero"><div class="at-hero-n">${heroTxt}</div><div class="at-hero-l">tracked since ${sinceTxt}</div></div>`;
+  html += `<div class="at-tiles">${tile(nDays, "days tracked")}${tile(byTask.size, "distinct tasks")}${tile(fmtDur(total / nDays), "avg / active day")}</div>`;
+  html += `<div class="rep-sub">Time by category, all-time</div>` + rankBarsHTML(catRows, total);
+  html += `<div class="rep-sub">By month, hours</div>` + monthlyColumnsHTML(byMonth);
+  html += `<div class="rep-sub">Most time on</div><ol class="rep-tasks">` +
+    taskRows.map((r) => `<li><span>${escapeHtml(r.label)}</span><span class="muted">${fmtDur(r.m)}</span></li>`).join("") + `</ol>`;
+  if (personRows.length) html += `<div class="rep-sub">Who you spent time with</div>` + rankBarsHTML(personRows, total);
+  html += `<div class="rep-sub">By day of week</div>${dowHTML}`;
+  box.innerHTML = html;
+}
 function renderHeatmap() {
   const box = $("#heatmap");
   const today = localDateStr(new Date());
@@ -1914,7 +2011,7 @@ function bind() {
   $("#stop-timer").onclick = stopTimer;
   $("#edit-timer").onclick = () => { if (state.running) openEditor(state.running); };
   $("#fab").onclick = quickAddTask;
-  $$("#report-subtabs .subtab").forEach((b) => (b.onclick = () => { state.reportTab = b.dataset.pane; applyReportTab(); }));
+  $$("#report-subtabs .subtab").forEach((b) => (b.onclick = () => { state.reportTab = b.dataset.pane; if (b.dataset.pane === "alltime") renderAllTime(); applyReportTab(); }));
   $("#week-prev").onclick = () => shiftWeek(-1);
   $("#week-next").onclick = () => shiftWeek(1);
   $("#month-prev").onclick = () => shiftMonth(-1);
