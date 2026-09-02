@@ -994,10 +994,13 @@ function renderTodos() {
   renderPersonControls();
   $("#todo-sort").value = state.todoSort;   // reflect default (category)
   const box = $("#todo-list"); box.innerHTML = "";
-  const doneCount = state.todos.filter((t) => isDoneNow(t)).length;
+  // "Show done" hides finished ONE-OFF tasks; recurring tasks always stay in the
+  // list (they're never truly finished — a daily task done today shows ticked and
+  // resets tomorrow), so they never mysteriously disappear from your master list.
+  const doneCount = state.todos.filter((t) => isDoneNow(t) && !isRecurring(t)).length;
   $("#showdone-label").textContent = `Show done${doneCount ? ` (${doneCount})` : ""}`;
   let list = state.todos.filter((t) => !state.personFilter || personsOf(t).includes(state.personFilter));
-  if (!state.showDone) list = list.filter((t) => !isDoneNow(t));
+  if (!state.showDone) list = list.filter((t) => isRecurring(t) || !isDoneNow(t));
   const q = state.todoSearch.trim().toLowerCase();
   if (q) list = list.filter((t) =>
     t.title.toLowerCase().includes(q) ||
