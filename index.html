@@ -12,7 +12,7 @@
   <meta name="apple-mobile-web-app-title" content="Time Tracker" />
   <link rel="apple-touch-icon" href="icon-180.png" />
   <title>Abhishek's Time Tracker</title>
-  <link rel="stylesheet" href="styles.css?v=43" />
+  <link rel="stylesheet" href="styles.css?v=44" />
 </head>
 <body>
   <!-- ===================== AUTH ===================== -->
@@ -38,6 +38,8 @@
     <main id="main">
       <!-- ---------- TODAY ---------- -->
       <section id="view-today" class="view">
+        <div class="today-grid">
+        <div class="today-col today-a">
         <!-- Timer -->
         <div class="timer-card" id="timer-card">
           <div id="timer-idle">
@@ -67,7 +69,9 @@
           <p class="muted small">Planned earlier but not finished — bring forward or mark done.</p>
           <div id="carry-list" class="plan-list"></div>
         </div>
+        </div>
 
+        <div class="today-col today-b">
         <!-- Plan your day -->
         <div class="card">
           <div class="section-row"><h3>Plan your day</h3><span class="muted small" id="plan-total"></span></div>
@@ -94,7 +98,9 @@
           </div>
           <div id="plan-list" class="plan-list"></div>
         </div>
+        </div>
 
+        <div class="today-col today-c">
         <!-- Logged today -->
         <div class="section-row">
           <h3>Logged today</h3>
@@ -106,6 +112,8 @@
         <div class="card">
           <h3>Planned vs actual — today</h3>
           <div id="pva"></div>
+        </div>
+        </div>
         </div>
       </section>
 
@@ -189,7 +197,8 @@
       <!-- ---------- TO-DOS ---------- -->
       <section id="view-todos" class="view hidden">
         <h2>To-Do list</h2>
-        <div class="card">
+        <div class="card todos-card">
+          <div class="todos-add">
           <p class="muted small">Your master task list. Tag a person to coordinate with, then filter by them. Tap ✎ to edit, ＋ to drop into today's plan.</p>
           <div class="plan-form">
             <input id="todo-new" placeholder="Add a task to your list" />
@@ -217,7 +226,9 @@
             </div>
             <button id="todo-add" class="btn primary block">Add task</button>
           </div>
+          </div>
           <datalist id="person-options"></datalist>
+          <div class="todos-browse">
           <input id="todo-search" class="todo-search" type="search" placeholder="🔍  Search tasks…" />
           <div class="todo-filter">
             <select id="todo-filter-person" class="chip-select"><option value="">All people</option></select>
@@ -229,6 +240,7 @@
             <label class="show-done"><input type="checkbox" id="todo-showdone" /> <span id="showdone-label">Show done</span></label>
           </div>
           <div id="todo-list" class="plan-list"></div>
+          </div>
         </div>
       </section>
     </main>
@@ -429,7 +441,7 @@
 
   <div id="toast" class="toast hidden"></div>
 
-  <script type="module" src="config.js?v=43"></script>
-  <script type="module" src="app.js?v=43"></script>
+  <script type="module" src="config.js?v=44"></script>
+  <script type="module" src="app.js?v=44"></script>
 </body>
 </html>

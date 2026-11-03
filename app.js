@@ -1038,12 +1038,15 @@ function renderTodos() {
         if (collapsed) state.collapsedCats.delete(k); else state.collapsedCats.add(k);
         saveCollapsed(); renderTodos();
       };
-      box.appendChild(hdr);
+      // header + rows stay together so a category isn't split across desktop columns
+      const group = document.createElement("div"); group.className = "cat-group";
+      group.appendChild(hdr);
       if (!collapsed) {
         const wrap = document.createElement("div"); wrap.className = "cat-items";
         for (const t of items) wrap.appendChild(todoRowEl(t));
-        box.appendChild(wrap);
+        group.appendChild(wrap);
       }
+      box.appendChild(group);
     }
   } else {
     for (const t of list) box.appendChild(todoRowEl(t));
@@ -1480,7 +1483,7 @@ function periodSummaryHTML(rangeEntries, opts = {}) {
     byTask.set(k, (byTask.get(k) || 0) + m);
   }
   if (total <= 0) return `<div class="empty">No time logged.</div>`;
-  let html = `<div class="rep-total">${fmtDur(total)} tracked</div>`;
+  let html = `<div class="rep-summary"><div class="rep-col"><div class="rep-total">${fmtDur(total)} tracked</div>`;
   if (opts.withAlignment && state.areas.some(hasTarget)) {
     const { score } = alignmentScore(done);
     if (score != null) html += `<div class="muted small" style="margin:-4px 0 10px">Alignment ${Math.round(score)}/100 vs your targets</div>`;
@@ -1497,9 +1500,9 @@ function periodSummaryHTML(rangeEntries, opts = {}) {
   }
   html += `</div>`;
   const tasks = [...byTask.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
-  html += `<div class="rep-sub">Most time on</div><ol class="rep-tasks">`;
+  html += `</div><div class="rep-col"><div class="rep-sub">Most time on</div><ol class="rep-tasks">`;
   for (const [note, m] of tasks) html += `<li><span>${escapeHtml(note)}</span><span class="muted">${fmtDur(m)}</span></li>`;
-  html += `</ol>`;
+  html += `</ol></div></div>`;
   return html;
 }
 
@@ -1509,7 +1512,9 @@ function renderDayDetail(dateStr) {
   const head = `<div class="rep-dayhead">${d.toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" })}</div>`;
   const entries = entriesInRange(d, next);
   const box = $("#day-detail");
-  box.innerHTML = head + dayTimelineHTML(entries) + dayEntriesHTML(entries) + periodSummaryHTML(entries) +
+  const entryList = dayEntriesHTML(entries);
+  box.innerHTML = head + dayTimelineHTML(entries) +
+    `<div class="day-cols">${entryList ? `<div>${entryList}</div>` : ""}<div>${periodSummaryHTML(entries)}</div></div>` +
     `<button class="btn ghost block day-addblock">＋ Add a block on this day</button>`;
   box.querySelectorAll(".day-entries .edit").forEach((b) => {
     b.onclick = () => { const e = state.entries.find((x) => x.id === b.dataset.id); if (e) openEditor(e); };
@@ -1610,7 +1615,9 @@ function renderTrendLine() {
     const ref = new Date(); ref.setDate(ref.getDate() - i * 7);
     weeks.push(alignmentScore(weekEntries(ref).list).score);
   }
-  const W = 320, H = 120, p = 10;
+  // a wider canvas on desktop, so the chart fills the card without ballooning in height
+  const wide = window.matchMedia("(min-width:900px)").matches;
+  const W = wide ? 960 : 320, H = wide ? 260 : 120, p = wide ? 24 : 10, fs = wide ? 11 : 8;
   const pts = weeks.map((s, i) => ({
     x: p + (i * (W - 2 * p)) / (weeks.length - 1),
     y: s == null ? null : H - p - (s / 100) * (H - 2 * p),
@@ -1619,12 +1626,12 @@ function renderTrendLine() {
   const dots = pts.map((q) => q.y == null ? "" : `<circle cx="${q.x}" cy="${q.y}" r="3.5" fill="var(--primary2)"/>`).join("");
   const grid = [0, 50, 100].map((v) => {
     const y = H - p - (v / 100) * (H - 2 * p);
-    return `<line x1="${p}" y1="${y}" x2="${W - p}" y2="${y}" stroke="var(--line)"/><text x="0" y="${y - 2}" font-size="8" fill="var(--muted)">${v}</text>`;
+    return `<line x1="${p}" y1="${y}" x2="${W - p}" y2="${y}" stroke="var(--line)"/><text x="0" y="${y - 2}" font-size="${fs}" fill="var(--muted)">${v}</text>`;
   }).join("");
   $("#trend-line").innerHTML = `<svg viewBox="0 0 ${W} ${H}" style="width:100%">
     ${grid}<path d="${line}" fill="none" stroke="var(--primary2)" stroke-width="2"/>${dots}
-    <text x="${p}" y="${H - 1}" font-size="8" fill="var(--muted)">8 wks ago</text>
-    <text x="${W - p}" y="${H - 1}" font-size="8" fill="var(--muted)" text-anchor="end">this wk</text></svg>`;
+    <text x="${p}" y="${H - 1}" font-size="${fs}" fill="var(--muted)">8 wks ago</text>
+    <text x="${W - p}" y="${H - 1}" font-size="${fs}" fill="var(--muted)" text-anchor="end">this wk</text></svg>`;
 }
 // ===================================================== ALL-TIME DASHBOARD
 // Loads every completed entry once (the normal load only keeps the last 84 days).
@@ -1725,15 +1732,17 @@ async function renderAllTime() {
   const dowHTML = `<div class="at-dow">` + byDow.map((m, i) =>
     `<div class="at-dow-col"><div class="at-dow-bar" style="height:${Math.max(3, m / dowMax * 60)}px" title="${fmtDur(m)}"></div><span>${DOW[i][0]}</span></div>`).join("") + `</div>`;
 
-  let html = `<div class="at-hero"><div class="at-hero-n">${heroTxt}</div><div class="at-hero-l">${sinceTxt}</div></div>`;
-  html += `<div class="at-tiles">${tile(nDays, "days tracked")}${tile(byTask.size, "distinct tasks")}${tile(fmtDur(total / nDays), "avg / active day")}</div>`;
-  html += `<div class="rep-sub">Time by category, all-time</div>` + rankBarsHTML(catRows, total);
-  html += `<div class="rep-sub">By month, hours</div>` + monthlyColumnsHTML(byMonth);
-  html += `<div class="rep-sub">Most time on</div><ol class="rep-tasks">` +
-    taskRows.map((r) => `<li><span>${escapeHtml(r.label)}</span><span class="muted">${fmtDur(r.m)}</span></li>`).join("") + `</ol>`;
-  if (personRows.length) html += `<div class="rep-sub">Who you spent time with</div>` + rankBarsHTML(personRows, total);
-  html += `<div class="rep-sub">By day of week</div>${dowHTML}`;
-  box.innerHTML = html;
+  const panel = (title, body) => `<div class="at-panel"><div class="rep-sub">${title}</div>${body}</div>`;
+  let html = `<div class="at-top"><div class="at-hero"><div class="at-hero-n">${heroTxt}</div><div class="at-hero-l">${sinceTxt}</div></div>`;
+  html += `<div class="at-tiles">${tile(nDays, "days tracked")}${tile(byTask.size, "distinct tasks")}${tile(fmtDur(total / nDays), "avg / active day")}</div></div>`;
+  html += `<div class="at-grid">`;
+  html += panel("Time by category, all-time", rankBarsHTML(catRows, total));
+  html += panel("By month, hours", monthlyColumnsHTML(byMonth));
+  html += panel("Most time on", `<ol class="rep-tasks">` +
+    taskRows.map((r) => `<li><span>${escapeHtml(r.label)}</span><span class="muted">${fmtDur(r.m)}</span></li>`).join("") + `</ol>`);
+  if (personRows.length) html += panel("Who you spent time with", rankBarsHTML(personRows, total));
+  html += panel("By day of week", dowHTML);
+  box.innerHTML = html + `</div>`;
 }
 // Date-range presets for the dashboard.
 function applyAtPreset(range) {
