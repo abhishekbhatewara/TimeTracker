@@ -38,6 +38,9 @@ textarea{resize:vertical}
 .brand.sm{font-size:.98rem;white-space:nowrap}
 .logo{color:var(--primary2)}
 .auth-msg{min-height:1.2em;color:var(--warn);font-size:.85rem;margin:0}
+.link-btn{background:none;border:none;color:var(--primary2);font-size:.85rem;padding:2px;align-self:center;text-decoration:underline}
+#pwset .confirm-card{text-align:left}
+#pwset input{margin-top:2px}
 
 /* ---------- app shell ---------- */
 .app{max-width:560px;margin:0 auto;min-height:100vh;display:flex;flex-direction:column;
@@ -271,7 +274,7 @@ textarea{resize:vertical}
 .todo-row .todo-title{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
   font-weight:600;font-size:.9rem}
 .todo-row .todo-title.struck{text-decoration:line-through;color:var(--muted)}
-.todo-row .iconaction{padding:2px 5px;font-size:.95rem;flex:none}
+.todo-row .iconaction{padding:2px 5px;font-size:.95rem;flex:none;background:none;border:none;color:var(--muted)}
 .todo-row .toplan{color:var(--good);font-size:1.15rem;font-weight:700}
 .mini-person{font-size:.8rem;opacity:.75;flex:none}
 .recurs{font-size:.85rem;flex:none;color:var(--primary2);opacity:.8;background:none;border:none;cursor:pointer;padding:0 2px}
@@ -413,6 +416,15 @@ textarea{resize:vertical}
   z-index:40;font-size:.9rem;box-shadow:0 6px 24px rgba(0,0,0,.4);display:flex;align-items:center}
 .toast-undo{background:none;border:none;color:var(--primary2);font-weight:700;margin-left:12px;
   cursor:pointer;font-size:.9rem}
+
+/* phone: carry-forward rows put their five actions on a second line, so the task
+   name gets the full width instead of being squeezed to a few letters */
+@media (max-width:899px){
+  .carry-card .plan-item{flex-wrap:wrap;row-gap:2px}
+  .carry-card .plan-item .body{flex:1 1 calc(100% - 24px)}
+  .carry-card .plan-item .title{white-space:normal}
+  .carry-card .plan-item .cf-edit{margin-left:auto}
+}
 
 /* ---------- desktop: use the whole screen ----------
    Everything above is the phone layout and stays as is. From 900px the bottom tab

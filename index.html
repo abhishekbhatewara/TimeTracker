@@ -12,7 +12,7 @@
   <meta name="apple-mobile-web-app-title" content="Time Tracker" />
   <link rel="apple-touch-icon" href="icon-180.png" />
   <title>Abhishek's Time Tracker</title>
-  <link rel="stylesheet" href="styles.css?v=44" />
+  <link rel="stylesheet" href="styles.css?v=45" />
 </head>
 <body>
   <!-- ===================== AUTH ===================== -->
@@ -24,6 +24,7 @@
       <input id="auth-pass" type="password" placeholder="Password" autocomplete="current-password" />
       <button id="auth-signin" class="btn primary">Sign in</button>
       <button id="auth-signup" class="btn ghost">Create account</button>
+      <button id="auth-forgot" class="link-btn" type="button">Forgot password?</button>
       <p id="auth-msg" class="auth-msg"></p>
     </div>
   </div>
@@ -427,6 +428,23 @@
     </div>
   </div>
 
+  <!-- ===================== SET NEW PASSWORD (after a reset-email link) ===================== -->
+  <div id="pwset" class="modal center hidden">
+    <div class="modal-card confirm-card">
+      <h3>Set a new password</h3>
+      <p class="muted small">You opened a password-reset link. Choose a new password for this account.</p>
+      <label class="pk-label" for="pwset-new">New password</label>
+      <input id="pwset-new" type="password" autocomplete="new-password" minlength="6" />
+      <label class="pk-label" for="pwset-confirm">Confirm new password</label>
+      <input id="pwset-confirm" type="password" autocomplete="new-password" minlength="6" />
+      <p id="pwset-msg" class="auth-msg"></p>
+      <div class="confirm-actions">
+        <button id="pwset-cancel" class="btn ghost">Later</button>
+        <button id="pwset-save" class="btn primary">Save password</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ===================== PROMPT MODAL ===================== -->
   <div id="prompt" class="modal center hidden">
     <div class="modal-card confirm-card">
@@ -441,7 +459,7 @@
 
   <div id="toast" class="toast hidden"></div>
 
-  <script type="module" src="config.js?v=44"></script>
-  <script type="module" src="app.js?v=44"></script>
+  <script type="module" src="config.js?v=45"></script>
+  <script type="module" src="app.js?v=45"></script>
 </body>
 </html>

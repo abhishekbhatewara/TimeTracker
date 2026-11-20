@@ -2054,6 +2054,28 @@ async function signIn() {
   const { error } = await sb.auth.signInWithPassword({ email: $("#auth-email").value.trim(), password: $("#auth-pass").value });
   if (error) $("#auth-msg").textContent = error.message;
 }
+// Email a password-reset link that brings the user back to this page, where the
+// PASSWORD_RECOVERY auth event opens the "Set a new password" dialog.
+async function forgotPassword() {
+  const email = $("#auth-email").value.trim();
+  if (!email) return ($("#auth-msg").textContent = "Enter your email above, then tap Forgot password.");
+  const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: location.origin + location.pathname });
+  $("#auth-msg").textContent = error ? error.message : `If ${email} has an account, a reset link is on its way — check your inbox (and spam).`;
+}
+function openPwSet() {
+  $("#pwset-new").value = ""; $("#pwset-confirm").value = ""; $("#pwset-msg").textContent = "";
+  $("#pwset").classList.remove("hidden");
+  setTimeout(() => $("#pwset-new").focus(), 40);
+}
+async function savePwSet() {
+  const pw = $("#pwset-new").value, again = $("#pwset-confirm").value;
+  if (pw.length < 6) return ($("#pwset-msg").textContent = "Use at least 6 characters.");
+  if (pw !== again) return ($("#pwset-msg").textContent = "The two passwords don't match.");
+  const { error } = await sb.auth.updateUser({ password: pw });
+  if (error) return ($("#pwset-msg").textContent = error.message);
+  $("#pwset").classList.add("hidden");
+  toast("Password updated — use it next time you sign in");
+}
 async function signUp() {
   if ($("#auth-pass").value.length < 6) return ($("#auth-msg").textContent = "Password must be 6+ characters");
   const { error } = await sb.auth.signUp({ email: $("#auth-email").value.trim(), password: $("#auth-pass").value });
@@ -2063,6 +2085,10 @@ async function signUp() {
 // ===================================================== wire up
 function bind() {
   $("#auth-signin").onclick = signIn;
+  $("#auth-forgot").onclick = forgotPassword;
+  $("#pwset-save").onclick = savePwSet;
+  $("#pwset-cancel").onclick = () => $("#pwset").classList.add("hidden");
+  $("#pwset-confirm").addEventListener("keydown", (e) => { if (e.key === "Enter") savePwSet(); });
   $("#auth-signup").onclick = signUp;
   $("#signout").onclick = () => sb.auth.signOut();
   $("#start-timer").onclick = () => openPicker("timer");
@@ -2129,8 +2155,9 @@ function bind() {
 }
 
 bind();
-sb.auth.onAuthStateChange((_e, session) => {
+sb.auth.onAuthStateChange((event, session) => {
   if (session?.user) { state.user = session.user; enterApp(); }
   else { state.user = null; showAuth(); }
+  if (event === "PASSWORD_RECOVERY") openPwSet();   // arrived via a reset-email link
 });
 sb.auth.getSession().then(({ data }) => { if (!data.session) showAuth(); });
